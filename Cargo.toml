@@ -1,0 +1,6 @@
+[package]
+name = "simple_excel_writer"
+version = "0.1.0"
+authors = ["outersky <outersky@gmail.com>"]
+
+[dependencies]
