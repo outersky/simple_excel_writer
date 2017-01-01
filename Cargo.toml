@@ -3,6 +3,6 @@ name = "simple_excel_writer"
 description = "Simple Excel Writer"
 version = "0.1.0"
 authors = ["outersky <outersky@gmail.com>"]
-license = "Apache License 2.0"
+license = "Apache-2.0"
 
 [dependencies]
