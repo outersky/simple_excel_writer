@@ -1,8 +1,9 @@
 [package]
 name = "simple_excel_writer"
 description = "Simple Excel Writer"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["outersky <outersky@gmail.com>"]
 license = "Apache-2.0"
+repository="https://github.com/outersky/simple_excel_writer"
 
 [dependencies]

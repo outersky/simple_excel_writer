@@ -174,9 +174,9 @@ pub struct Column {
 }
 
 impl Sheet {
-    pub fn new(sheet_name: &str) -> Sheet {
+    pub fn new(id: usize, sheet_name: &str) -> Sheet {
         Sheet {
-            id: 1,
+            id: id,
             name: sheet_name.to_owned(),
             ..Default::default()
         }

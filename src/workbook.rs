@@ -3,33 +3,45 @@ use std::path::*;
 use std::fs::{self, File};
 use super::{Sheet, SheetWriter};
 
+#[derive(Default)]
 pub struct Workbook {
     pub file: String,
     tmp_dir: String,
+    max_sheet_index: usize,
+    sheets: Vec<SheetRef>,
+}
+
+struct SheetRef {
+    id: usize,
+    name: String,
 }
 
 impl Workbook {
     pub fn create(xlsx_file: &str) -> Workbook {
         let target_dir = format!("{}_tmp", &xlsx_file);
 
-        let mut workbook = Workbook {
+        let workbook = Workbook {
             file: xlsx_file.to_owned(),
             tmp_dir: target_dir,
+            max_sheet_index: 0,
+            ..Default::default()
         };
 
         fs::remove_dir_all(&workbook.tmp_dir).is_ok();
         fs::create_dir(&workbook.tmp_dir).unwrap();
 
-        workbook.create_files().expect("Create files error!");
-
         workbook
     }
 
     pub fn create_sheet(&mut self, sheet_name: &str) -> Sheet {
-        Sheet::new(sheet_name)
+        self.max_sheet_index += 1;
+        self.sheets.push(SheetRef { id: self.max_sheet_index, name: sheet_name.to_owned() });
+        Sheet::new(self.max_sheet_index, sheet_name)
     }
 
     pub fn close(&mut self) -> Result<()> {
+        self.create_files().expect("Create files error!");
+
         use std::process::*;
         let cmd = format!("zip -q -r {} *", self.file);
 
@@ -75,14 +87,14 @@ impl Workbook {
 
         // xl
         root.push("xl");
-        fs::create_dir(root.as_path())?;
+        fs::create_dir(root.as_path()).is_ok();
         root.push("styles.xml");
         let writer = &mut File::create(root.as_path())?;
         Self::create_styles(writer)?;
         root.pop();
         root.push("workbook.xml");
         let writer = &mut File::create(root.as_path())?;
-        Self::create_workbook(writer)?;
+        self.create_workbook(writer)?;
         root.pop();
 
         // xl/_rels
@@ -90,7 +102,7 @@ impl Workbook {
         fs::create_dir(root.as_path())?;
         root.push("workbook.xml.rels");
         let writer = &mut File::create(root.as_path())?;
-        Self::create_xl_rels(writer)?;
+        self.create_xl_rels(writer)?;
         root.pop();
         root.pop();
 
@@ -103,14 +115,16 @@ impl Workbook {
         root.pop();
         root.pop();
 
-        // xl/worksheets
-        root.push("worksheets");
-        fs::create_dir(root.as_path())?;
-        root.push("sheet1.xml");
-        let writer = &mut File::create(root.as_path())?;
-        Self::create_sample_sheet(writer)?;
-        root.pop();
-        root.pop();
+        /*
+                // xl/worksheets
+                root.push("worksheets");
+                fs::create_dir(root.as_path())?;
+                root.push("sheet1.xml");
+                let writer = &mut File::create(root.as_path())?;
+                Self::create_sample_sheet(writer)?;
+                root.pop();
+                root.pop();
+        */
         Ok(())
     }
 
@@ -119,7 +133,8 @@ impl Workbook {
         let mut root = PathBuf::from(&self.tmp_dir);
         root.push("xl");
         root.push("worksheets");
-        root.push("sheet1.xml");
+        fs::create_dir_all(root.as_path())?;
+        root.push(format!("sheet{}.xml", sheet.id));
         let writer = &mut File::create(root.as_path()).unwrap();
 
         let sw = &mut SheetWriter::new(sheet, writer);
@@ -240,27 +255,38 @@ impl Workbook {
         writer.write_all(xml)
     }
 
-    fn create_workbook(writer: &mut Write) -> Result<()> {
+    fn create_workbook(&mut self, writer: &mut Write) -> Result<()> {
         let xml = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
     <workbookPr date1904="false"/>
-    <sheets>
-        <sheet name="Sheet1" sheetId="1" r:id="rId1"/>
+    <sheets>"#;
+        let tail = r#"
     </sheets>
 </workbook>
         "#;
-        writer.write_all(xml.as_bytes())
+        writer.write_all(xml.as_bytes())?;
+        for sf in self.sheets.iter() {
+            let str = format!("<sheet name=\"{}\" sheetId=\"{}\" r:id=\"rId{}\"/>", sf.name, sf.id, sf.id + 2);
+            writer.write_all(str.as_bytes())?;
+        }
+        writer.write_all(tail.as_bytes())
     }
 
-    fn create_xl_rels(writer: &mut Write) -> Result<()> {
+    fn create_xl_rels(&mut self, writer: &mut Write) -> Result<()> {
         let xml = br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
-<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="theme/theme1.xml"/>
-<Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="theme/theme1.xml"/>
+<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+        "#;
+        let tail = br#"
 </Relationships>
         "#;
-        writer.write_all(xml)
+        writer.write_all(xml)?;
+        for sf in self.sheets.iter() {
+            let str = format!("<Relationship Id=\"rId{}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet{}.xml\"/>", sf.id + 2, sf.id);
+            writer.write_all(str.as_bytes())?;
+        }
+        writer.write_all(tail)
     }
 
     fn create_xl_theme(writer: &mut Write) -> Result<()> {
@@ -586,6 +612,7 @@ impl Workbook {
         writer.write_all(xml.as_bytes())
     }
 
+/*
     fn create_sample_sheet(writer: &mut Write) -> Result<()> {
         let xml = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
@@ -656,4 +683,5 @@ impl Workbook {
         "#;
         writer.write_all(xml.as_bytes())
     }
+*/
 }
