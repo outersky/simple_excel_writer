@@ -17,7 +17,7 @@ fn main() {
         sw.append_row(row!["Name", "Title","Success","Remark"])?;
         sw.append_row(row!["Amy", (), true])?;
         sw.append_blank_rows(2);
-        sw.append_row(row!["Tony", blank!(2), "tired"])
+        sw.append_row(row!["Tony", blank!(2), "retired"])
     }).expect("write excel error!");
 
     wb.close().expect("close excel error!");

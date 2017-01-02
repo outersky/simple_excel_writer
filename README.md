@@ -4,36 +4,26 @@ simple excel writer in Rust
 ##Example
 
 ```rust,no_run
+    #[macro_use]
     extern crate simple_excel_writer as excel;
     
     use excel::*;
     
     fn main() {
-        println!("hello");
-    
         let mut wb = Workbook::create("/tmp/b.xlsx");
-        let mut sheet = wb.create_sheet("Sheet2");
+        let mut sheet = wb.create_sheet("Sheet1");
     
-    /*
-        // optional: set column width
-        sheet.add_column(Column { custom_width: 1.0, width: 50.0 });
-        sheet.add_column(Column { custom_width: 1.0, width: 50.0 });
-        sheet.add_column(Column { custom_width: 1.0, width: 150.0 });
-    */
+        // set column width
+        sheet.add_column(Column { width: 30.0 });
+        sheet.add_column(Column { width: 30.0 });
+        sheet.add_column(Column { width: 20.0 });
     
         wb.write_sheet(&mut sheet, |sheet_writer| {
-            let mut r = Row::new();
-            r.add_cell(1, true);
-            r.add_cell(2, "Hello");
-            sheet_writer.append_row(r)?;
-    
-            sheet_writer.append_empty_rows(5);
-    
-            r = Row::new();
-            r.add_cell(1, 3.6);
-            r.add_cell(2, "World");
-            r.add_cell(3, "!");
-            sheet_writer.append_row(r)
+            let sw = sheet_writer;
+            sw.append_row(row!["Name", "Title","Success","Remark"])?;
+            sw.append_row(row!["Amy", (), true])?;
+            sw.append_blank_rows(2);
+            sw.append_row(row!["Tony", blank!(2), "retired"])
         }).expect("write excel error!");
     
         wb.close().expect("close excel error!");
