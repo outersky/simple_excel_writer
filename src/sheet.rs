@@ -1,17 +1,43 @@
 use std::io::{Write, Result};
 
+#[macro_export]
+macro_rules! row {
+    ($( $x:expr ),*) => {
+        {
+            let mut row = Row::new();
+            $(row.add_cell($x);)*
+            row
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! blank {
+    ($x:expr) => {
+        {
+            CellValue::Blank($x)
+        }
+    };
+    () => {
+        {
+            CellValue::Blank(1)
+        }
+    };
+}
+
 #[derive(Default)]
 pub struct Sheet {
     pub id: usize,
     pub name: String,
     pub columns: Vec<Column>,
-    max_row_id: usize,
+    max_row_index: usize,
 }
 
 #[derive(Default)]
 pub struct Row {
     pub cells: Vec<Cell>,
     row_index: usize,
+    max_col_index: usize,
 }
 
 pub trait ToCellValue {
@@ -42,13 +68,41 @@ impl<'a> ToCellValue for &'a str {
     }
 }
 
+impl ToCellValue for () {
+    fn to_cell_value(&self) -> CellValue {
+        CellValue::Blank(1)
+    }
+}
+
 impl Row {
     pub fn new() -> Row {
         Row { ..Default::default() }
     }
 
-    pub fn add_cell<T>(&mut self, column_index: u8, value: T) where T: ToCellValue + Sized {
-        self.cells.push(Cell { column_index: column_index, value: value.to_cell_value() });
+    pub fn add_cell<T>(&mut self, value: T) where T: ToCellValue + Sized {
+        let value = value.to_cell_value();
+        match value {
+            CellValue::Blank(cols) => self.max_col_index += cols,
+            _ => {
+                self.max_col_index += 1;
+                self.cells.push(Cell { column_index: self.max_col_index, value: value })
+            },
+        }
+    }
+
+    pub fn add_empty_cells(&mut self, cols: usize) {
+        self.max_col_index += cols
+    }
+
+    pub fn join(&mut self, row: Row) {
+        for cell in row.cells.into_iter() {
+            self.inner_add_cell(cell)
+        }
+    }
+
+    fn inner_add_cell(&mut self, cell: Cell) {
+        self.max_col_index += 1;
+        self.cells.push(Cell { column_index: self.max_col_index, value: cell.value })
     }
 
     pub fn write(&self, writer: &mut Write) -> Result<()> {
@@ -61,10 +115,18 @@ impl Row {
     }
 }
 
+#[derive(Clone)]
 pub enum CellValue {
     Bool(bool),
     Number(f64),
     String(String),
+    Blank(usize),
+}
+
+impl ToCellValue for CellValue {
+    fn to_cell_value(&self) -> CellValue {
+        self.clone()
+    }
 }
 
 fn write_value(cv: &CellValue, ref_id: String, writer: &mut Write) -> Result<()> {
@@ -84,13 +146,14 @@ fn write_value(cv: &CellValue, ref_id: String, writer: &mut Write) -> Result<()>
         &CellValue::String(ref s) => {
             let s = format!("<c r=\"{}\" t=\"str\"><v>{}</v></c>", ref_id, s);
             writer.write_all(s.as_bytes())?;
-        }
+        },
+        &CellValue::Blank(_) => {},
     }
     Ok(())
 }
 
 pub struct Cell {
-    pub column_index: u8,
+    pub column_index: usize,
     pub value: CellValue,
 }
 
@@ -101,14 +164,13 @@ impl Cell {
     }
 }
 
-pub fn column_letter(column_index: u8) -> String {
-    format!("{}", ('A' as u8 + (column_index - 1)) as char)
+pub fn column_letter(column_index: usize) -> String {
+    format!("{}", ('A' as usize + (column_index as usize - 1)) as u8 as char)
 }
 
 #[derive(Default)]
 pub struct Column {
     pub width: f32,
-    pub custom_width: f32,
 }
 
 impl Sheet {
@@ -124,29 +186,15 @@ impl Sheet {
         self.columns.push(column)
     }
 
-/*
-    fn write<W, F>(&self, writer: &mut W, write_data: F) -> Result<()>
-        where F: FnOnce(&mut W) -> Result<()> + Sized, W: Write + Sized {
-        self.write_head(writer)?;
-
-        self.write_data_begin(writer)?;
-
-        write_data(writer)?;
-
-        self.write_data_end(writer)?;
-        self.close(writer)
-    }
-
-*/
     fn write_row<W>(&mut self, writer: &mut W, mut row: Row) -> Result<()>
         where W: Write + Sized {
-        self.max_row_id += 1;
-        row.row_index = self.max_row_id;
+        self.max_row_index += 1;
+        row.row_index = self.max_row_index;
         row.write(writer)
     }
 
-    fn write_empty_rows(&mut self, rows: usize) {
-        self.max_row_id += rows;
+    fn write_blank_rows(&mut self, rows: usize) {
+        self.max_row_index += rows;
     }
 
     fn write_head(&self, writer: &mut Write) -> Result<()> {
@@ -167,7 +215,7 @@ impl Sheet {
         writer.write_all("\n<cols>\n".as_bytes())?;
         let mut i = 1;
         for col in self.columns.iter() {
-            writer.write_all(format!("<col min=\"{}\" max=\"{}\" width=\"{}\" customWidth=\"{}\"/>\n", &i, &i, col.width, col.custom_width).as_bytes())?;
+            writer.write_all(format!("<col min=\"{}\" max=\"{}\" width=\"{}\" customWidth=\"1.0\"/>\n", &i, &i, col.width).as_bytes())?;
             i += 1;
         }
         writer.write_all("</cols>\n".as_bytes())
@@ -202,8 +250,8 @@ where Writer: Write + Sized
     pub fn append_row(&mut self, row: Row) -> Result<()> {
         self.sheet.write_row(self.writer, row)
     }
-    pub fn append_empty_rows(&mut self, rows: usize) {
-        self.sheet.write_empty_rows(rows)
+    pub fn append_blank_rows(&mut self, rows: usize) {
+        self.sheet.write_blank_rows(rows)
     }
 
     pub fn write<F>(&mut self, write_data: F) -> Result<()>
