@@ -1,6 +1,7 @@
 # simple_excel_writer
 simple excel writer in Rust
 
+[![Build Status](https://travis-ci.org/outersky/simple_excel_writer.png?branch=master)](https://travis-ci.org/outersky/simple_excel_writer) 
 [Documentation](https://docs.rs/simple_excel_writer/)
 
 ##Example
