@@ -6,7 +6,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! simple_excel_writer="0.1.1"
+//! simple_excel_writer="0.1.3"
 //! ```
 //! #### Sample
 //!
@@ -30,7 +30,7 @@
 //!         sw.append_row(row!["Name", "Title","Success","Remark"])?;
 //!         sw.append_row(row!["Amy", (), true])?;
 //!         sw.append_blank_rows(2);
-//!         sw.append_row(row!["Tony", blank!(2), "retired"])
+//!         sw.append_row(row!["Tony", blank!(30), "retired"])
 //!     }).expect("write excel error!");
 //!
 //!     let mut sheet = wb.create_sheet("Sheet2");

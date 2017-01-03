@@ -40,6 +40,28 @@ pub struct Row {
     max_col_index: usize,
 }
 
+pub struct Cell {
+    pub column_index: usize,
+    pub value: CellValue,
+}
+
+pub struct Column {
+    pub width: f32,
+}
+
+#[derive(Clone)]
+pub enum CellValue {
+    Bool(bool),
+    Number(f64),
+    String(String),
+    Blank(usize),
+}
+
+pub struct SheetWriter<'a, 'b, Writer> where 'b: 'a, Writer: 'b {
+    sheet: &'a mut Sheet,
+    writer: &'b mut Writer,
+}
+
 pub trait ToCellValue {
     fn to_cell_value(&self) -> CellValue;
 }
@@ -115,14 +137,6 @@ impl Row {
     }
 }
 
-#[derive(Clone)]
-pub enum CellValue {
-    Bool(bool),
-    Number(f64),
-    String(String),
-    Blank(usize),
-}
-
 impl ToCellValue for CellValue {
     fn to_cell_value(&self) -> CellValue {
         self.clone()
@@ -152,11 +166,6 @@ fn write_value(cv: &CellValue, ref_id: String, writer: &mut Write) -> Result<()>
     Ok(())
 }
 
-pub struct Cell {
-    pub column_index: usize,
-    pub value: CellValue,
-}
-
 impl Cell {
     fn write(&self, row_index: usize, writer: &mut Write) -> Result<()> {
         let ref_id = format!("{}{}", column_letter(self.column_index), row_index);
@@ -164,13 +173,24 @@ impl Cell {
     }
 }
 
+/**
+ * column_index : 1-based
+ */
 pub fn column_letter(column_index: usize) -> String {
-    format!("{}", ('A' as usize + (column_index as usize - 1)) as u8 as char)
-}
+    let mut column_index = (column_index - 1) as isize ; // turn to 0-based;
+    let single = |n:u8| {  // n : 0-based
+        (b'A' + n) as char
+    };
+    let mut result = vec![];
+    while column_index >= 0 {
+        result.push( single( ( column_index % 26) as u8 ) );
+        column_index = column_index / 26 - 1;
+    }
 
-#[derive(Default)]
-pub struct Column {
-    pub width: f32,
+    let result = result.into_iter().rev();
+
+    use std::iter::FromIterator;
+    String::from_iter(result)
 }
 
 impl Sheet {
@@ -215,7 +235,7 @@ impl Sheet {
         writer.write_all("\n<cols>\n".as_bytes())?;
         let mut i = 1;
         for col in self.columns.iter() {
-            writer.write_all(format!("<col min=\"{}\" max=\"{}\" width=\"{}\" customWidth=\"1.0\"/>\n", &i, &i, col.width).as_bytes())?;
+            writer.write_all(format!("<col min=\"{}\" max=\"{}\" width=\"{}\" customWidth=\"1\"/>\n", &i, &i, col.width).as_bytes())?;
             i += 1;
         }
         writer.write_all("</cols>\n".as_bytes())
@@ -233,11 +253,6 @@ impl Sheet {
         let foot = "</worksheet>\n";
         writer.write_all(foot.as_bytes())
     }
-}
-
-pub struct SheetWriter<'a, 'b, Writer> where 'b: 'a, Writer: 'b {
-    sheet: &'a mut Sheet,
-    writer: &'b mut Writer,
 }
 
 impl<'a, 'b, Writer> SheetWriter<'a, 'b, Writer>
