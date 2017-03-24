@@ -7,5 +7,11 @@ license = "Apache-2.0"
 homepage="https://github.com/outersky/simple_excel_writer"
 repository="https://github.com/outersky/simple_excel_writer"
 documentation="https://docs.rs/simple_excel_writer/"
+readme = "README.md"
+keywords = ["excel", "xls", "xlsx", "office"]
+categories = ["encoding", "text-processing"]
+
+[badges]
+travis-ci = { repository = "outersky/simple_excel_writer" }
 
 [dependencies]
