@@ -11,11 +11,12 @@ fn main() {
     sheet.add_column(Column { width: 30.0 });
     sheet.add_column(Column { width: 30.0 });
     sheet.add_column(Column { width: 80.0 });
+    sheet.add_column(Column { width: 60.0 });
 
     wb.write_sheet(&mut sheet, |sheet_writer| {
         let sw = sheet_writer;
-        sw.append_row(row!["Name", "Title","Success","Remark"])?;
-        sw.append_row(row!["Amy", (), true])?;
+        sw.append_row(row!["Name", "Title","Success","XML Remark"])?;
+        sw.append_row(row!["Amy", (), true,"<xml><tag>\"Hello\" & 'World'</tag></xml>"])?;
         sw.append_blank_rows(2);
         sw.append_row(row!["Tony", blank!(720), "retired"])  // A5: Tony , AAT5 : retired
     }).expect("write excel error!");

@@ -20,11 +20,12 @@ fn main() {
     sheet.add_column(Column { width: 30.0 });
     sheet.add_column(Column { width: 30.0 });
     sheet.add_column(Column { width: 80.0 });
+    sheet.add_column(Column { width: 60.0 });
 
     wb.write_sheet(&mut sheet, |sheet_writer| {
         let sw = sheet_writer;
-        sw.append_row(row!["Name", "Title","Success","Remark"])?;
-        sw.append_row(row!["Amy", (), true])?;
+        sw.append_row(row!["Name", "Title","Success","XML Remark"])?;
+        sw.append_row(row!["Amy", (), true,"<xml><tag>\"Hello\" & 'World'</tag></xml>"])?;
         sw.append_blank_rows(2);
         sw.append_row(row!["Tony", blank!(2), "retired"])
     }).expect("write excel error!");
@@ -50,6 +51,10 @@ Only tested on macOS / Linux for the time being, because it depends on locale `z
 - support style
 
 ##Change Log
+
+####0.1.4 (2017-03-24)
+- escape xml characters.
+
 ####0.1.3 (2017-01-03)
 - support 26+ columns .
 - fix column width bug.

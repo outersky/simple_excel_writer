@@ -158,12 +158,20 @@ fn write_value(cv: &CellValue, ref_id: String, writer: &mut Write) -> Result<()>
             writer.write_all(s.as_bytes())?;
         },
         &CellValue::String(ref s) => {
-            let s = format!("<c r=\"{}\" t=\"str\"><v>{}</v></c>", ref_id, s);
+            let s = format!("<c r=\"{}\" t=\"str\"><v>{}</v></c>", ref_id, escape_xml(&s));
             writer.write_all(s.as_bytes())?;
         },
         &CellValue::Blank(_) => {},
     }
     Ok(())
+}
+
+fn escape_xml(str: &str) -> String {
+    let str = str.replace("&", "&amp;");
+    let str = str.replace("<", "&lt;");
+    let str = str.replace(">", "&gt;");
+    let str = str.replace("'", "&apos;");
+    str.replace("\"", "&quot;")
 }
 
 impl Cell {
@@ -177,13 +185,14 @@ impl Cell {
  * column_index : 1-based
  */
 pub fn column_letter(column_index: usize) -> String {
-    let mut column_index = (column_index - 1) as isize ; // turn to 0-based;
-    let single = |n:u8| {  // n : 0-based
+    let mut column_index = (column_index - 1) as isize; // turn to 0-based;
+    let single = |n: u8| {
+        // n : 0-based
         (b'A' + n) as char
     };
     let mut result = vec![];
     while column_index >= 0 {
-        result.push( single( ( column_index % 26) as u8 ) );
+        result.push(single((column_index % 26) as u8));
         column_index = column_index / 26 - 1;
     }
 
@@ -256,7 +265,7 @@ impl Sheet {
 }
 
 impl<'a, 'b, Writer> SheetWriter<'a, 'b, Writer>
-where Writer: Write + Sized
+    where Writer: Write + Sized
 {
     pub fn new(sheet: &'a mut Sheet, writer: &'b mut Writer) -> SheetWriter<'a, 'b, Writer> {
         SheetWriter { sheet: sheet, writer: writer }
