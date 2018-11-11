@@ -12,7 +12,8 @@
 //!
 //! ```
 //! #[macro_use]
-//! extern crate simple_excel_writer as excel;
+//! extern crate simple_excel_writer;
+//! use simple_excel_writer as excel;
 //!
 //! use excel::*;
 //!
@@ -50,8 +51,11 @@
 #![crate_type="rlib"]
 #![crate_type="dylib"]
 
+extern crate zip;
+
 pub mod sheet;
 pub mod workbook;
+mod utilities;
 
 pub use sheet::*;
 pub use workbook::*;
