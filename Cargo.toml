@@ -15,3 +15,4 @@ categories = ["encoding", "text-processing"]
 travis-ci = { repository = "outersky/simple_excel_writer" }
 
 [dependencies]
+zip = "0.4.2" 

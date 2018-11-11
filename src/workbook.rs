@@ -1,7 +1,8 @@
+use super::{Sheet, SheetWriter};
+use std::fs::{self, File};
 use std::io::*;
 use std::path::*;
-use std::fs::{self, File};
-use super::{Sheet, SheetWriter};
+use utilities::zip_files;
 
 #[derive(Default)]
 pub struct Workbook {
@@ -35,21 +36,19 @@ impl Workbook {
 
     pub fn create_sheet(&mut self, sheet_name: &str) -> Sheet {
         self.max_sheet_index += 1;
-        self.sheets.push(SheetRef { id: self.max_sheet_index, name: sheet_name.to_owned() });
+        self.sheets.push(SheetRef {
+            id: self.max_sheet_index,
+            name: sheet_name.to_owned(),
+        });
         Sheet::new(self.max_sheet_index, sheet_name)
     }
 
     pub fn close(&mut self) -> Result<()> {
         self.create_files().expect("Create files error!");
 
-        use std::process::*;
-        let cmd = format!("zip -q -r {} *", self.file);
+        // zip the files in the working directory
+        zip_files(&self.tmp_dir, &self.file)?;
 
-        Command::new("sh")
-            .current_dir(&self.tmp_dir)
-            .arg("-c")
-            .arg(cmd)
-            .spawn().unwrap().wait()?;
         fs::remove_dir_all(&self.tmp_dir)
     }
 
@@ -70,7 +69,6 @@ impl Workbook {
         Self::create_rels(writer)?;
         root.pop();
         root.pop();
-
 
         // docProps
         root.push("docProps");
@@ -129,7 +127,9 @@ impl Workbook {
     }
 
     pub fn write_sheet<F>(&mut self, sheet: &mut Sheet, write_data: F) -> Result<()>
-        where F: FnOnce(&mut SheetWriter<File>) -> Result<()> + Sized {
+    where
+        F: FnOnce(&mut SheetWriter<File>) -> Result<()> + Sized,
+    {
         let mut root = PathBuf::from(&self.tmp_dir);
         root.push("xl");
         root.push("worksheets");
@@ -266,7 +266,12 @@ impl Workbook {
         "#;
         writer.write_all(xml.as_bytes())?;
         for sf in self.sheets.iter() {
-            let str = format!("<sheet name=\"{}\" sheetId=\"{}\" r:id=\"rId{}\"/>", sf.name, sf.id, sf.id + 2);
+            let str = format!(
+                "<sheet name=\"{}\" sheetId=\"{}\" r:id=\"rId{}\"/>",
+                sf.name,
+                sf.id,
+                sf.id + 2
+            );
             writer.write_all(str.as_bytes())?;
         }
         writer.write_all(tail.as_bytes())
@@ -612,7 +617,7 @@ impl Workbook {
         writer.write_all(xml.as_bytes())
     }
 
-/*
+    /*
     fn create_sample_sheet(writer: &mut Write) -> Result<()> {
         let xml = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
