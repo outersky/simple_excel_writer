@@ -5,9 +5,22 @@ use excel::*;
 fn creates_and_saves_an_excel_sheet() {
     let mut wb = excel::Workbook::create("test.xlsx");
     let mut ws = wb.create_sheet("test_sheet");
-
+        ws.add_column(Column { width: 60.0 });
+        ws.add_column(Column { width: 30.0 });
+        ws.add_column(Column { width: 10.0 });
+        ws.add_column(Column { width: 60.0 });
     wb.write_sheet(&mut ws, |sw| {
-        sw.append_row(row!["Name", "Title", "Success"])
+        sw.append_row(row!["Name", "Title", "Success","Remark"]);
+        sw.append_row(row!["Mary", "Acountant", false,"<xml><tag>\"Hello\" & 'World'</tag></xml>"]);
+        sw.append_row(row!["Marly", "10/10/2015 7 PM", true,500.])
+
+    }).expect("Write excel error!");
+
+   let mut ws = wb.create_sheet("test_sheet2");
+
+     wb.write_sheet(&mut ws, |sw| {
+        sw.append_row(row!["Name", "Title", "Success"]);
+        sw.append_row(row!["Mary", "This", true])
 
     }).expect("Write excel error!");
 

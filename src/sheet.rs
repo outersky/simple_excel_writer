@@ -60,6 +60,7 @@ pub enum CellValue {
 pub struct SheetWriter<'a, 'b, Writer> where 'b: 'a, Writer: 'b {
     sheet: &'a mut Sheet,
     writer: &'b mut Writer,
+    shared_strings: &'b mut crate::SharedStrings
 }
 
 pub trait ToCellValue {
@@ -127,13 +128,23 @@ impl Row {
         self.cells.push(Cell { column_index: self.max_col_index, value: cell.value })
     }
 
-    pub fn write(&self, writer: &mut Write) -> Result<()> {
+    pub fn write(&mut self, writer: &mut Write) -> Result<()> {
         let head = format!("<row r=\"{}\">\n", self.row_index);
         writer.write_all(head.as_bytes())?;
         for c in self.cells.iter() {
             c.write(self.row_index, writer)?;
         }
         writer.write_all("\n</row>\n".as_bytes())
+    }
+    
+    pub fn replace_strings(mut row:Row, shared:&mut crate::SharedStrings)->Row{
+        for cell in row.cells.iter_mut(){
+            cell.value =  match &cell.value {
+            CellValue::String(val)=>{
+                shared.to_cellvalue(&escape_xml(val))
+              },
+            x=>x.to_owned()
+        }; }row
     }
 }
 
@@ -158,7 +169,7 @@ fn write_value(cv: &CellValue, ref_id: String, writer: &mut Write) -> Result<()>
             writer.write_all(s.as_bytes())?;
         },
         &CellValue::String(ref s) => {
-            let s = format!("<c r=\"{}\" t=\"str\"><v>{}</v></c>", ref_id, escape_xml(&s));
+            let s = format!("<c r=\"{}\" t=\"s\"><v>{}</v></c>", ref_id, s);//escape_xml(&s));
             writer.write_all(s.as_bytes())?;
         },
         &CellValue::Blank(_) => {},
@@ -267,12 +278,13 @@ impl Sheet {
 impl<'a, 'b, Writer> SheetWriter<'a, 'b, Writer>
     where Writer: Write + Sized
 {
-    pub fn new(sheet: &'a mut Sheet, writer: &'b mut Writer) -> SheetWriter<'a, 'b, Writer> {
-        SheetWriter { sheet: sheet, writer: writer }
+    pub fn new(sheet: &'a mut Sheet, writer: &'b mut Writer, shared_strings: &'b mut crate::SharedStrings) -> SheetWriter<'a, 'b, Writer> {
+        SheetWriter { sheet: sheet, writer: writer, shared_strings }
     }
 
     pub fn append_row(&mut self, row: Row) -> Result<()> {
-        self.sheet.write_row(self.writer, row)
+        
+        self.sheet.write_row(self.writer, Row::replace_strings(row,&mut self.shared_strings))
     }
     pub fn append_blank_rows(&mut self, rows: usize) {
         self.sheet.write_blank_rows(rows)

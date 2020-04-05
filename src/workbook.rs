@@ -9,12 +9,40 @@ pub struct Workbook {
     pub file: String,
     tmp_dir: String,
     max_sheet_index: usize,
+    shared_strings: SharedStrings,
     sheets: Vec<SheetRef>,
+}
+#[derive(Default, Clone)]
+pub struct SharedStrings{
+    count: usize,
+    strings: Vec<String>
 }
 
 struct SheetRef {
     id: usize,
     name: String,
+}
+
+impl SharedStrings{
+    pub fn new()->Self{
+        SharedStrings{..Default::default()}
+    }
+    pub fn add_count(&mut self){
+        self.count += 1;
+    }
+    /// Takes a string value checks if it's present in shared strings and returns a CellValue with the index
+    pub fn to_cellvalue(&mut self, val:&String)->crate::CellValue{
+        self.add_count();
+        match self.strings.binary_search(&val){
+            Ok(idx)=>{
+                crate::sheet::CellValue::String(format!("{}",idx))
+            },
+            Err(_)=>{
+                self.strings.push(val.to_owned());
+                crate::sheet::CellValue::String(format!("{}",(self.strings.len()-1)))
+            }
+        }
+    }
 }
 
 impl Workbook {
@@ -36,6 +64,7 @@ impl Workbook {
 
     pub fn create_sheet(&mut self, sheet_name: &str) -> Sheet {
         self.max_sheet_index += 1;
+        
         self.sheets.push(SheetRef {
             id: self.max_sheet_index,
             name: sheet_name.to_owned(),
@@ -58,7 +87,7 @@ impl Workbook {
         // [Content_Types].xml
         root.push("[Content_Types].xml");
         let writer = &mut File::create(root.as_path()).unwrap();
-        Self::create_content_types(writer)?;
+        self.create_content_types(writer)?;
         root.pop();
 
         // _rels/.rels
@@ -75,7 +104,7 @@ impl Workbook {
         fs::create_dir(root.as_path())?;
         root.push("app.xml");
         let writer = &mut File::create(root.as_path())?;
-        Self::create_app(writer)?;
+        self.create_app(writer)?;
         root.pop();
         root.push("core.xml");
         let writer = &mut File::create(root.as_path())?;
@@ -90,6 +119,12 @@ impl Workbook {
         let writer = &mut File::create(root.as_path())?;
         Self::create_styles(writer)?;
         root.pop();
+        //if self.shared_strings.is_some(){
+            root.push("sharedStrings.xml");
+            let writer = &mut File::create(root.as_path())?;
+            self.create_shared_strings(writer)?;
+        root.pop();
+        //}
         root.push("workbook.xml");
         let writer = &mut File::create(root.as_path())?;
         self.create_workbook(writer)?;
@@ -137,11 +172,11 @@ impl Workbook {
         root.push(format!("sheet{}.xml", sheet.id));
         let writer = &mut File::create(root.as_path()).unwrap();
 
-        let sw = &mut SheetWriter::new(sheet, writer);
+        let sw = &mut SheetWriter::new(sheet, writer, &mut self.shared_strings);
         sw.write(write_data)
     }
 
-    fn create_content_types(writer: &mut Write) -> Result<()> {
+    fn create_content_types(&mut self, writer: &mut Write) -> Result<()> {
         let xml = br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types" xmlns:xsd="http://www.w3.org/2001/XMLSchema"
        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
@@ -149,18 +184,28 @@ impl Workbook {
     <Default Extension="bin" ContentType="application/vnd.ms-excel.sheet.binary.macroEnabled.main"/>
     <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
     <Override PartName="/xl/workbook.xml"
-              ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
-    <Override PartName="/xl/worksheets/sheet1.xml"
-              ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
-    <Override PartName="/xl/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>
+              ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>"#;
+              writer.write_all(xml)?;
+              for x in 1..self.sheets.len(){
+                let wb = format!(
+                    "<Override PartName=\"/xl/worksheets/sheet{}.xml\"
+                    ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/>",
+                    x
+                );
+                writer.write_all(wb.as_bytes())?;
+              }
+    
+              let tail = br#"<Override PartName="/xl/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>
     <Override PartName="/xl/styles.xml"
               ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+    <Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>
     <Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>
     <Override PartName="/docProps/app.xml"
               ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>
 </Types>
         "#;
-        writer.write_all(xml)
+        
+        writer.write_all(tail)
     }
 
     fn create_rels(writer: &mut Write) -> Result<()> {
@@ -174,7 +219,7 @@ impl Workbook {
         writer.write_all(xml)
     }
 
-    fn create_app(writer: &mut Write) -> Result<()> {
+    fn create_app(&mut self, writer: &mut Write) -> Result<()> {
         let xml = br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"
             xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
@@ -190,13 +235,30 @@ impl Workbook {
         </vt:vector>
     </HeadingPairs>
     <TitlesOfParts>
-        <vt:vector size="1" baseType="lpstr">
-            <vt:lpstr>SheetJS</vt:lpstr>
-        </vt:vector>
+    <vt:vector size="1" baseType="lpstr">
+    <vt:lpstr>SheetJS</vt:lpstr>
+    "#;
+    writer.write_all(xml)?;
+    
+    
+        /* let vector = format!(
+                    "<vt:vector size=\"{}\" baseType=\"lpstr\">",
+                    self.sheets.len()
+                );
+                writer.write_all(vector.as_bytes())?;
+                for sf in self.sheets.iter() {
+                    let str = format!(
+                        "<vt:lpstr>{}</vt:lpstr>",
+                        sf.name
+                    );
+                    writer.write_all(str.as_bytes())?;
+                } */
+    let tail = r#"</vt:vector>
     </TitlesOfParts>
 </Properties>
         "#;
-        writer.write_all(xml)
+        
+        writer.write_all(tail.as_bytes())
     }
 
     fn create_core(writer: &mut Write) -> Result<()> {
@@ -276,6 +338,30 @@ impl Workbook {
         }
         writer.write_all(tail.as_bytes())
     }
+    fn create_shared_strings(&mut self, writer: &mut Write) -> Result<()> {
+        let shared_strings = &self.shared_strings;//.as_ref().unwrap();
+        let xml = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        "#;
+        let sst =format!("<sst xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" count=\"{}\" uniqueCount=\"{}\">",shared_strings.count,shared_strings.strings.len());
+        let tail = r#"</sst>"#;
+        writer.write_all(xml.as_bytes())?;
+        writer.write_all(sst.as_bytes())?;
+        // might have to use a vector instead to ensure index
+        for sf in shared_strings.strings.iter() {
+            let space = match sf.trim().len()<sf.len(){
+                true=>format!("t xml:space=\"preserve\""),
+                false=>format!("t"),
+            };
+            let xmls = format!(
+                "<si><{}>{}</{}></si>",space,
+                sf,"t"
+                
+            );
+            writer.write_all(xmls.as_bytes())?;
+        }
+        
+        writer.write_all(tail.as_bytes())
+    }
 
     fn create_xl_rels(&mut self, writer: &mut Write) -> Result<()> {
         let xml = br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -287,10 +373,14 @@ impl Workbook {
 </Relationships>
         "#;
         writer.write_all(xml)?;
+        let mut rid =0;
         for sf in self.sheets.iter() {
             let str = format!("<Relationship Id=\"rId{}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet{}.xml\"/>", sf.id + 2, sf.id);
             writer.write_all(str.as_bytes())?;
+            rid = sf.id +2;
         }
+        let ss = format!("<Relationship Id=\"rId{}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings\" Target=\"sharedStrings.xml\"/>",rid+1);
+        writer.write_all(ss.as_bytes())?;
         writer.write_all(tail)
     }
 
