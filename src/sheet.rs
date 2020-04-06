@@ -137,9 +137,9 @@ impl Row {
         }
         writer.write_all("\n</row>\n".as_bytes())
     }
-    
+
     pub fn replace_strings(mut self, shared: &mut crate::SharedStrings) -> Self {
-        if !shared.used(){return self}
+        if !shared.used() { return self; }
         for cell in self.cells.iter_mut() {
             cell.value = match &cell.value {
                 CellValue::String(val) => {
@@ -175,7 +175,7 @@ fn write_value(cv: &CellValue, ref_id: String, writer: &mut dyn Write) -> Result
         &CellValue::String(ref s) => {
             let s = format!("<c r=\"{}\" t=\"str\"><v>{}</v></c>", ref_id, escape_xml(&s));
             writer.write_all(s.as_bytes())?;
-        },
+        }
         &CellValue::SharedString(ref s) => {
             let s = format!("<c r=\"{}\" t=\"s\"><v>{}</v></c>", ref_id, s);
             writer.write_all(s.as_bytes())?;
@@ -221,13 +221,16 @@ pub fn column_letter(column_index: usize) -> String {
     String::from_iter(result)
 }
 
-pub fn validate_name(name: &str)->String{
+pub fn validate_name(name: &str) -> String {
     let name = name.replace("&", "&amp;");
     let name = name.replace("<", "&lt;");
     let name = name.replace(">", "&gt;");
     let name = name.replace("'", "&apos;");
     let mut name = name.replace("\"", "&quot;");
-    let boundry = match name.is_char_boundary(30){true=>30,false=>29};
+    let boundry = match name.is_char_boundary(30) {
+        true => 30,
+        false => 29
+    };
     name.truncate(boundry);
     name.replace("/", "-")
 }

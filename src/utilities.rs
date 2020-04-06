@@ -3,6 +3,7 @@ use std::{
     io::{Error, ErrorKind, Read, Result, Write},
     path::Path,
 };
+
 use zip::{self, ZipWriter};
 
 ///zip_files takes a path an zipps it's contents to an output file. It keeps the folder structure intact.

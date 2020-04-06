@@ -28,16 +28,16 @@ struct SheetRef {
 }
 
 impl SharedStrings {
-    pub fn new()-> Self {
-        SharedStrings { used:true, ..Default::default() }
+    pub fn new() -> Self {
+        SharedStrings { used: true, ..Default::default() }
     }
-    pub fn new_unused()->Self{
-        SharedStrings{used:false,..Default::default()}
+    pub fn new_unused() -> Self {
+        SharedStrings { used: false, ..Default::default() }
     }
-    pub fn used(&self)->bool{
+    pub fn used(&self) -> bool {
         self.used
     }
-    pub fn set_used(&mut self, using: bool){
+    pub fn set_used(&mut self, using: bool) {
         self.used = using;
     }
     pub fn add_count(&mut self) {
