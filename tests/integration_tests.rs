@@ -16,11 +16,19 @@ fn creates_and_saves_an_excel_sheet() {
 
     }).expect("Write excel error!");
 
-   let mut ws = wb.create_sheet("test_sheet2");
+   let mut ws = wb.create_sheet("test_sheet<2");
 
      wb.write_sheet(&mut ws, |sw| {
         sw.append_row(row!["Name", "Title", "Success"]);
         sw.append_row(row!["Mary", "This", true])
+
+    }).expect("Write excel error!");
+
+    let mut ws = wb.create_sheet("test_sheet3");
+
+     wb.write_sheet(&mut ws, |sw| {
+        sw.append_row(row!["Name", "Title", "Success"]);
+        sw.append_row(row!["Mary", "Monkey", true])
 
     }).expect("Write excel error!");
 
