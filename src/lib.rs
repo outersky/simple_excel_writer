@@ -47,18 +47,18 @@
 //! ```
 //!
 
-#![crate_name="simple_excel_writer"]
-#![crate_type="rlib"]
-#![crate_type="dylib"]
+#![crate_name = "simple_excel_writer"]
+#![crate_type = "rlib"]
+#![crate_type = "dylib"]
 
 extern crate zip;
+
+pub use sheet::*;
+pub use workbook::*;
 
 pub mod sheet;
 pub mod workbook;
 mod utilities;
-
-pub use sheet::*;
-pub use workbook::*;
 
 #[cfg(test)]
 mod tests {

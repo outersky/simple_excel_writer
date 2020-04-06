@@ -1,4 +1,3 @@
-#[macro_use]
 extern crate simple_excel_writer as excel;
 
 use excel::*;
