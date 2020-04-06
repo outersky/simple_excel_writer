@@ -7,5 +7,4 @@
 Cargo.lock
 
 .idea
-
-/test.xlsx
+test.xlsx

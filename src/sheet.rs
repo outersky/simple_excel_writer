@@ -55,6 +55,7 @@ pub enum CellValue {
     Number(f64),
     String(String),
     Blank(usize),
+    SharedString(String),
 }
 
 pub struct SheetWriter<'a, 'b, Writer> where 'b: 'a, Writer: 'b {
@@ -136,8 +137,9 @@ impl Row {
         }
         writer.write_all("\n</row>\n".as_bytes())
     }
-
+    
     pub fn replace_strings(mut self, shared: &mut crate::SharedStrings) -> Self {
+        if !shared.used(){return self}
         for cell in self.cells.iter_mut() {
             cell.value = match &cell.value {
                 CellValue::String(val) => {
@@ -171,7 +173,11 @@ fn write_value(cv: &CellValue, ref_id: String, writer: &mut dyn Write) -> Result
             writer.write_all(s.as_bytes())?;
         }
         &CellValue::String(ref s) => {
-            let s = format!("<c r=\"{}\" t=\"s\"><v>{}</v></c>", ref_id, s);//escape_xml(&s));
+            let s = format!("<c r=\"{}\" t=\"str\"><v>{}</v></c>", ref_id, escape_xml(&s));
+            writer.write_all(s.as_bytes())?;
+        },
+        &CellValue::SharedString(ref s) => {
+            let s = format!("<c r=\"{}\" t=\"s\"><v>{}</v></c>", ref_id, s);
             writer.write_all(s.as_bytes())?;
         }
         &CellValue::Blank(_) => {}
@@ -215,11 +221,22 @@ pub fn column_letter(column_index: usize) -> String {
     String::from_iter(result)
 }
 
+pub fn validate_name(name: &str)->String{
+    let name = name.replace("&", "&amp;");
+    let name = name.replace("<", "&lt;");
+    let name = name.replace(">", "&gt;");
+    let name = name.replace("'", "&apos;");
+    let mut name = name.replace("\"", "&quot;");
+    let boundry = match name.is_char_boundary(30){true=>30,false=>29};
+    name.truncate(boundry);
+    name.replace("/", "-")
+}
+
 impl Sheet {
     pub fn new(id: usize, sheet_name: &str) -> Sheet {
         Sheet {
             id,
-            name: sheet_name.to_owned(),
+            name: validate_name(sheet_name),//sheet_name.to_owned(),//escape_xml(sheet_name),
             ..Default::default()
         }
     }

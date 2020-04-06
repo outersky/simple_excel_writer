@@ -17,11 +17,18 @@ fn creates_and_saves_an_excel_sheet() {
         sw.append_row(row!["Marly", "10/10/2015 7 PM", true,500.])
     }).expect("Write excel error!");
 
-    let mut ws = wb.create_sheet("test_sheet2");
+    let mut ws = wb.create_sheet("test_sheet<2");
 
     wb.write_sheet(&mut ws, |sw| {
         sw.append_row(row!["Name", "Title", "Success"]).unwrap();
         sw.append_row(row!["Mary", "This", true])
+    }).expect("Write excel error!");
+
+    let mut ws = wb.create_sheet("test_sheet3 is very long and breaks the limit of 31 charcters");
+
+    wb.write_sheet(&mut ws, |sw| {
+        sw.append_row(row!["Name", "Title", "Success"]).unwrap();
+        sw.append_row(row!["Mary", "Monkey", true])
     }).expect("Write excel error!");
 
     wb.close().expect("Close excel error!");

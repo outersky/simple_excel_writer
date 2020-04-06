@@ -18,6 +18,7 @@ pub struct Workbook {
 #[derive(Default, Clone)]
 pub struct SharedStrings {
     count: usize,
+    used: bool,
     strings: Vec<String>,
 }
 
@@ -27,8 +28,17 @@ struct SheetRef {
 }
 
 impl SharedStrings {
-    pub fn new() -> Self {
-        SharedStrings { ..Default::default() }
+    pub fn new()-> Self {
+        SharedStrings { used:true, ..Default::default() }
+    }
+    pub fn new_unused()->Self{
+        SharedStrings{used:false,..Default::default()}
+    }
+    pub fn used(&self)->bool{
+        self.used
+    }
+    pub fn set_used(&mut self, using: bool){
+        self.used = using;
     }
     pub fn add_count(&mut self) {
         self.count += 1;
@@ -38,17 +48,18 @@ impl SharedStrings {
         self.add_count();
         match self.strings.binary_search(&val) {
             Ok(idx) => {
-                crate::sheet::CellValue::String(format!("{}", idx))
+                crate::sheet::CellValue::SharedString(format!("{}", idx))
             }
             Err(_) => {
                 self.strings.push(val.to_owned());
-                crate::sheet::CellValue::String(format!("{}", (self.strings.len() - 1)))
+                crate::sheet::CellValue::SharedString(format!("{}", (self.strings.len() - 1)))
             }
         }
     }
 }
 
 impl Workbook {
+    /// Creates a workbook using shared strings
     pub fn create(xlsx_file: &str) -> Workbook {
         let target_dir = format!("{}_tmp", &xlsx_file);
 
@@ -56,6 +67,26 @@ impl Workbook {
             file: xlsx_file.to_owned(),
             tmp_dir: target_dir,
             max_sheet_index: 0,
+            shared_strings: SharedStrings::new(),
+            ..Default::default()
+        };
+
+        if Path::new(&workbook.tmp_dir).is_dir() {
+            fs::remove_dir_all(&workbook.tmp_dir).unwrap();
+        }
+        fs::create_dir(&workbook.tmp_dir).unwrap();
+
+        workbook
+    }
+    /// Creates a workbook not using shared strings
+    pub fn create_simple(xlsx_file: &str) -> Workbook {
+        let target_dir = format!("{}_tmp", &xlsx_file);
+
+        let workbook = Workbook {
+            file: xlsx_file.to_owned(),
+            tmp_dir: target_dir,
+            max_sheet_index: 0,
+            shared_strings: SharedStrings::new_unused(),
             ..Default::default()
         };
 
@@ -72,7 +103,7 @@ impl Workbook {
 
         self.sheets.push(SheetRef {
             id: self.max_sheet_index,
-            name: sheet_name.to_owned(),
+            name: crate::validate_name(sheet_name),//sheet_name.to_owned(),
         });
         Sheet::new(self.max_sheet_index, sheet_name)
     }
@@ -126,7 +157,7 @@ impl Workbook {
         let writer = &mut File::create(root.as_path())?;
         Self::create_styles(writer)?;
         root.pop();
-        //if self.shared_strings.is_some(){
+        //if self.shared_strings.used(){
         root.push("sharedStrings.xml");
         let writer = &mut File::create(root.as_path())?;
         self.create_shared_strings(writer)?;
