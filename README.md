@@ -47,6 +47,12 @@ fn main() {
 
 ## Change Log
 
+#### 0.1.6 (2020-04-06)
+- support shared strings between worksheets, thanks to Mikael Edlund.
+
+#### 0.1.5 (2019-03-21)
+- support Windows platform, thanks to Carl Fredrik Samson.
+
 #### 0.1.4 (2017-03-24)
 - escape xml characters.
 
