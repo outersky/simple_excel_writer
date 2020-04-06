@@ -24,7 +24,7 @@ fn creates_and_saves_an_excel_sheet() {
 
     }).expect("Write excel error!");
 
-    let mut ws = wb.create_sheet("test_sheet3");
+    let mut ws = wb.create_sheet("test_sheet3 is very long and breaks the limit of 31 charcters");
 
      wb.write_sheet(&mut ws, |sw| {
         sw.append_row(row!["Name", "Title", "Success"]);

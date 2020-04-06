@@ -224,7 +224,9 @@ pub fn validate_name(name: &str)->String{
     let name = name.replace("<", "&lt;");
     let name = name.replace(">", "&gt;");
     let name = name.replace("'", "&apos;");
-    let name = name.replace("\"", "&quot;");
+    let mut name = name.replace("\"", "&quot;");
+    let boundry = match name.is_char_boundary(30){true=>30,false=>29};
+    name.truncate(boundry);
     name.replace("/", "-")        
 }
 
