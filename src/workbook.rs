@@ -52,9 +52,10 @@ impl SharedStrings {
     /// Takes a string value checks if it's present in shared strings and returns a CellValue with the index
     pub fn register(&mut self, val: &String) -> crate::CellValue {
         self.add_count();
-        match self.strings.binary_search(&val) {
-            Ok(idx) => crate::sheet::CellValue::SharedString(format!("{}", idx)),
-            Err(_) => {
+        
+        match self.strings.iter().position(|v|v==val) {
+            Some(idx) => crate::sheet::CellValue::SharedString(format!("{}", idx)),
+            None => {
                 self.strings.push(val.to_owned());
                 crate::sheet::CellValue::SharedString(format!("{}", (self.strings.len() - 1)))
             }

@@ -12,16 +12,10 @@ fn creates_and_saves_an_excel_sheet() {
     ws.add_column(Column { width: 10.0 });
     ws.add_column(Column { width: 60.0 });
     wb.write_sheet(&mut ws, |sw| {
-        sw.append_row(row!["Name", "Title", "Success", "Remark"])
-            .unwrap();
-        sw.append_row(row![
-            "Mary",
-            "Acountant",
-            false,
-            r#"<xml><tag>"" & 'World'</tag></xml>"#
-        ])
-        .unwrap();
-        sw.append_row(row!["Marly", "", true, 500.])
+        sw.append_row(row!["Name", "Title", "Success", "Remark"]).unwrap();
+        sw.append_row(row!["Mary", "Acountant", false, r#"<xml><tag>"" & 'World'</tag></xml>"#]).unwrap();
+        sw.append_row(row!["Mary", "Programmer", true, "<xml><tag>\"Hello\" & 'World'</tag></xml>"]).unwrap();
+        sw.append_row(row!["Marly", "Mary",  "Success", "Success", true, 500.])
     })
     .expect("Write excel error!");
 
@@ -37,7 +31,7 @@ fn creates_and_saves_an_excel_sheet() {
 
     wb.write_sheet(&mut ws, |sw| {
         sw.append_row(row!["Name", "Title", "Success"]).unwrap();
-        sw.append_row(row!["Mary", "Monkey", true])
+        sw.append_row(row!["Mary", "Sgt Monkey", true])
     })
     .expect("Write excel error!");
 
