@@ -29,10 +29,16 @@ struct SheetRef {
 
 impl SharedStrings {
     pub fn new() -> Self {
-        SharedStrings { used: true, ..Default::default() }
+        SharedStrings {
+            used: true,
+            ..Default::default()
+        }
     }
     pub fn new_unused() -> Self {
-        SharedStrings { used: false, ..Default::default() }
+        SharedStrings {
+            used: false,
+            ..Default::default()
+        }
     }
     pub fn used(&self) -> bool {
         self.used
@@ -47,9 +53,7 @@ impl SharedStrings {
     pub fn register(&mut self, val: &String) -> crate::CellValue {
         self.add_count();
         match self.strings.binary_search(&val) {
-            Ok(idx) => {
-                crate::sheet::CellValue::SharedString(format!("{}", idx))
-            }
+            Ok(idx) => crate::sheet::CellValue::SharedString(format!("{}", idx)),
             Err(_) => {
                 self.strings.push(val.to_owned());
                 crate::sheet::CellValue::SharedString(format!("{}", (self.strings.len() - 1)))
@@ -103,7 +107,7 @@ impl Workbook {
 
         self.sheets.push(SheetRef {
             id: self.max_sheet_index,
-            name: crate::validate_name(sheet_name),//sheet_name.to_owned(),
+            name: crate::validate_name(sheet_name), //sheet_name.to_owned(),
         });
         Sheet::new(self.max_sheet_index, sheet_name)
     }
@@ -200,8 +204,8 @@ impl Workbook {
     }
 
     pub fn write_sheet<F>(&mut self, sheet: &mut Sheet, write_data: F) -> Result<()>
-        where
-            F: FnOnce(&mut SheetWriter<File>) -> Result<()> + Sized,
+    where
+        F: FnOnce(&mut SheetWriter<File>) -> Result<()> + Sized,
     {
         let mut root = PathBuf::from(&self.tmp_dir);
         root.push("xl");
@@ -278,19 +282,18 @@ impl Workbook {
     "#;
         writer.write_all(xml)?;
 
-
         /* let vector = format!(
-                    "<vt:vector size=\"{}\" baseType=\"lpstr\">",
-                    self.sheets.len()
-                );
-                writer.write_all(vector.as_bytes())?;
-                for sf in self.sheets.iter() {
-                    let str = format!(
-                        "<vt:lpstr>{}</vt:lpstr>",
-                        sf.name
-                    );
-                    writer.write_all(str.as_bytes())?;
-                } */
+            "<vt:vector size=\"{}\" baseType=\"lpstr\">",
+            self.sheets.len()
+        );
+        writer.write_all(vector.as_bytes())?;
+        for sf in self.sheets.iter() {
+            let str = format!(
+                "<vt:lpstr>{}</vt:lpstr>",
+                sf.name
+            );
+            writer.write_all(str.as_bytes())?;
+        } */
         let tail = r#"</vt:vector>
     </TitlesOfParts>
 </Properties>
@@ -377,7 +380,7 @@ impl Workbook {
         writer.write_all(tail.as_bytes())
     }
     fn create_shared_strings(&mut self, writer: &mut dyn Write) -> Result<()> {
-        let shared_strings = &self.shared_strings;//.as_ref().unwrap();
+        let shared_strings = &self.shared_strings; //.as_ref().unwrap();
         let xml = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
         "#;
         let sst = format!("<sst xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" count=\"{}\" uniqueCount=\"{}\">", shared_strings.count, shared_strings.strings.len());
@@ -390,10 +393,7 @@ impl Workbook {
                 true => format!("t xml:space=\"preserve\""),
                 false => format!("t"),
             };
-            let xmls = format!(
-                "<si><{}>{}</{}></si>", space,
-                sf, "t"
-            );
+            let xmls = format!("<si><{}>{}</{}></si>", space, sf, "t");
             writer.write_all(xmls.as_bytes())?;
         }
 
@@ -745,75 +745,75 @@ impl Workbook {
     }
 
     /*
-    fn create_sample_sheet(writer: &mut Write) -> Result<()> {
-        let xml = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
-           xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
-    <dimension ref="A1:E4"/>
-    <cols>
-        <col min="1" max="1" width="6.7109375" customWidth="1"/>
-        <col min="2" max="2" width="7.7109375" customWidth="1"/>
-        <col min="3" max="3" width="10.7109375" customWidth="1"/>
-        <col min="4" max="4" width="20.7109375" customWidth="1"/>
-        <col min="5" max="5" width="20.7109375" customWidth="1"/>
-    </cols>
-    <sheetData>
-        <row r="1">
-            <c r="A1">
-                <v>1</v>
-            </c>
-            <c r="B1">
-                <v>2</v>
-            </c>
-            <c r="C1">
-                <v>3</v>
-            </c>
-        </row>
-        <row r="2">
-            <c r="A2" t="b">
-                <v>1</v>
-            </c>
-            <c r="B2" t="b">
-                <v>0</v>
-            </c>
-            <c r="D2" t="str">
-                <v>sheetjs</v>
-            </c>
-        </row>
-        <row r="3">
-            <c r="A3" t="str">
-                <v>foo</v>
-            </c>
-            <c r="B3" t="str">
-                <v>bar</v>
-            </c>
-            <c r="C3" s="1">
-                <v>41689.604166666664</v>
-            </c>
-            <c r="D3" t="str">
-                <v>0.3</v>
-            </c>
-        </row>
-        <row r="4">
-            <c r="A4" t="str">
-                <v>baz2222</v>
-            </c>
-            <c r="C4" t="str">
-                <v>qux姓名</v>
-            </c>
-        </row>
-        <row r="5">
-            <c r="A5" t="str">
-                <v>baz2222</v>
-            </c>
-            <c r="E5" t="str">
-                <v>qux姓名</v>
-            </c>
-        </row>
-    </sheetData>
-</worksheet>
-        "#;
-        writer.write_all(xml.as_bytes())
-    }
-*/
+        fn create_sample_sheet(writer: &mut Write) -> Result<()> {
+            let xml = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+    <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+               xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+        <dimension ref="A1:E4"/>
+        <cols>
+            <col min="1" max="1" width="6.7109375" customWidth="1"/>
+            <col min="2" max="2" width="7.7109375" customWidth="1"/>
+            <col min="3" max="3" width="10.7109375" customWidth="1"/>
+            <col min="4" max="4" width="20.7109375" customWidth="1"/>
+            <col min="5" max="5" width="20.7109375" customWidth="1"/>
+        </cols>
+        <sheetData>
+            <row r="1">
+                <c r="A1">
+                    <v>1</v>
+                </c>
+                <c r="B1">
+                    <v>2</v>
+                </c>
+                <c r="C1">
+                    <v>3</v>
+                </c>
+            </row>
+            <row r="2">
+                <c r="A2" t="b">
+                    <v>1</v>
+                </c>
+                <c r="B2" t="b">
+                    <v>0</v>
+                </c>
+                <c r="D2" t="str">
+                    <v>sheetjs</v>
+                </c>
+            </row>
+            <row r="3">
+                <c r="A3" t="str">
+                    <v>foo</v>
+                </c>
+                <c r="B3" t="str">
+                    <v>bar</v>
+                </c>
+                <c r="C3" s="1">
+                    <v>41689.604166666664</v>
+                </c>
+                <c r="D3" t="str">
+                    <v>0.3</v>
+                </c>
+            </row>
+            <row r="4">
+                <c r="A4" t="str">
+                    <v>baz2222</v>
+                </c>
+                <c r="C4" t="str">
+                    <v>qux姓名</v>
+                </c>
+            </row>
+            <row r="5">
+                <c r="A5" t="str">
+                    <v>baz2222</v>
+                </c>
+                <c r="E5" t="str">
+                    <v>qux姓名</v>
+                </c>
+            </row>
+        </sheetData>
+    </worksheet>
+            "#;
+            writer.write_all(xml.as_bytes())
+        }
+    */
 }

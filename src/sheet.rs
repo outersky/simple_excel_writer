@@ -13,16 +13,12 @@ macro_rules! row {
 
 #[macro_export]
 macro_rules! blank {
-    ($x:expr) => {
-        {
-            CellValue::Blank($x)
-        }
-    };
-    () => {
-        {
-            CellValue::Blank(1)
-        }
-    };
+    ($x:expr) => {{
+        CellValue::Blank($x)
+    }};
+    () => {{
+        CellValue::Blank(1)
+    }};
 }
 
 #[derive(Default)]
@@ -58,7 +54,11 @@ pub enum CellValue {
     SharedString(String),
 }
 
-pub struct SheetWriter<'a, 'b, Writer> where 'b: 'a, Writer: 'b {
+pub struct SheetWriter<'a, 'b, Writer>
+where
+    'b: 'a,
+    Writer: 'b,
+{
     sheet: &'a mut Sheet,
     writer: &'b mut Writer,
     shared_strings: &'b mut crate::SharedStrings,
@@ -100,16 +100,24 @@ impl ToCellValue for () {
 
 impl Row {
     pub fn new() -> Row {
-        Row { ..Default::default() }
+        Row {
+            ..Default::default()
+        }
     }
 
-    pub fn add_cell<T>(&mut self, value: T) where T: ToCellValue + Sized {
+    pub fn add_cell<T>(&mut self, value: T)
+    where
+        T: ToCellValue + Sized,
+    {
         let value = value.to_cell_value();
         match value {
             CellValue::Blank(cols) => self.max_col_index += cols,
             _ => {
                 self.max_col_index += 1;
-                self.cells.push(Cell { column_index: self.max_col_index, value })
+                self.cells.push(Cell {
+                    column_index: self.max_col_index,
+                    value,
+                })
             }
         }
     }
@@ -126,7 +134,10 @@ impl Row {
 
     fn inner_add_cell(&mut self, cell: Cell) {
         self.max_col_index += 1;
-        self.cells.push(Cell { column_index: self.max_col_index, value: cell.value })
+        self.cells.push(Cell {
+            column_index: self.max_col_index,
+            value: cell.value,
+        })
     }
 
     pub fn write(&mut self, writer: &mut dyn Write) -> Result<()> {
@@ -139,13 +150,13 @@ impl Row {
     }
 
     pub fn replace_strings(mut self, shared: &mut crate::SharedStrings) -> Self {
-        if !shared.used() { return self; }
+        if !shared.used() {
+            return self;
+        }
         for cell in self.cells.iter_mut() {
             cell.value = match &cell.value {
-                CellValue::String(val) => {
-                    shared.register(&escape_xml(val))
-                }
-                x => x.to_owned()
+                CellValue::String(val) => shared.register(&escape_xml(val)),
+                x => x.to_owned(),
             };
         }
         self
@@ -173,7 +184,11 @@ fn write_value(cv: &CellValue, ref_id: String, writer: &mut dyn Write) -> Result
             writer.write_all(s.as_bytes())?;
         }
         &CellValue::String(ref s) => {
-            let s = format!("<c r=\"{}\" t=\"str\"><v>{}</v></c>", ref_id, escape_xml(&s));
+            let s = format!(
+                "<c r=\"{}\" t=\"str\"><v>{}</v></c>",
+                ref_id,
+                escape_xml(&s)
+            );
             writer.write_all(s.as_bytes())?;
         }
         &CellValue::SharedString(ref s) => {
@@ -222,14 +237,10 @@ pub fn column_letter(column_index: usize) -> String {
 }
 
 pub fn validate_name(name: &str) -> String {
-    let name = name.replace("&", "&amp;");
-    let name = name.replace("<", "&lt;");
-    let name = name.replace(">", "&gt;");
-    let name = name.replace("'", "&apos;");
-    let mut name = name.replace("\"", "&quot;");
+    let mut name = escape_xml(name);
     let boundry = match name.is_char_boundary(30) {
         true => 30,
-        false => 29
+        false => 29,
     };
     name.truncate(boundry);
     name.replace("/", "-")
@@ -239,7 +250,7 @@ impl Sheet {
     pub fn new(id: usize, sheet_name: &str) -> Sheet {
         Sheet {
             id,
-            name: validate_name(sheet_name),//sheet_name.to_owned(),//escape_xml(sheet_name),
+            name: validate_name(sheet_name), //sheet_name.to_owned(),//escape_xml(sheet_name),
             ..Default::default()
         }
     }
@@ -249,7 +260,9 @@ impl Sheet {
     }
 
     fn write_row<W>(&mut self, writer: &mut W, mut row: Row) -> Result<()>
-        where W: Write + Sized {
+    where
+        W: Write + Sized,
+    {
         self.max_row_index += 1;
         row.row_index = self.max_row_index;
         row.write(writer)
@@ -277,7 +290,13 @@ impl Sheet {
         writer.write_all("\n<cols>\n".as_bytes())?;
         let mut i = 1;
         for col in self.columns.iter() {
-            writer.write_all(format!("<col min=\"{}\" max=\"{}\" width=\"{}\" customWidth=\"1\"/>\n", &i, &i, col.width).as_bytes())?;
+            writer.write_all(
+                format!(
+                    "<col min=\"{}\" max=\"{}\" width=\"{}\" customWidth=\"1\"/>\n",
+                    &i, &i, col.width
+                )
+                .as_bytes(),
+            )?;
             i += 1;
         }
         writer.write_all("</cols>\n".as_bytes())
@@ -298,21 +317,33 @@ impl Sheet {
 }
 
 impl<'a, 'b, Writer> SheetWriter<'a, 'b, Writer>
-    where Writer: Write + Sized
+where
+    Writer: Write + Sized,
 {
-    pub fn new(sheet: &'a mut Sheet, writer: &'b mut Writer, shared_strings: &'b mut crate::SharedStrings) -> SheetWriter<'a, 'b, Writer> {
-        SheetWriter { sheet, writer, shared_strings }
+    pub fn new(
+        sheet: &'a mut Sheet,
+        writer: &'b mut Writer,
+        shared_strings: &'b mut crate::SharedStrings,
+    ) -> SheetWriter<'a, 'b, Writer> {
+        SheetWriter {
+            sheet,
+            writer,
+            shared_strings,
+        }
     }
 
     pub fn append_row(&mut self, row: Row) -> Result<()> {
-        self.sheet.write_row(self.writer, row.replace_strings(&mut self.shared_strings))
+        self.sheet
+            .write_row(self.writer, row.replace_strings(&mut self.shared_strings))
     }
     pub fn append_blank_rows(&mut self, rows: usize) {
         self.sheet.write_blank_rows(rows)
     }
 
     pub fn write<F>(&mut self, write_data: F) -> Result<()>
-        where F: FnOnce(&mut SheetWriter<Writer>) -> Result<()> + Sized {
+    where
+        F: FnOnce(&mut SheetWriter<Writer>) -> Result<()> + Sized,
+    {
         self.sheet.write_head(self.writer)?;
 
         self.sheet.write_data_begin(self.writer)?;
