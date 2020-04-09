@@ -57,8 +57,8 @@ pub use sheet::*;
 pub use workbook::*;
 
 pub mod sheet;
-pub mod workbook;
 mod utilities;
+pub mod workbook;
 
 #[cfg(test)]
 mod tests {
