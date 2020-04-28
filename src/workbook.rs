@@ -89,7 +89,6 @@ impl Workbook {
     }
 
     pub fn create_in_memory() -> Self {
-        eprintln!("create_in_memory");
         Self {
             xlsx_file: None,
             archive_files: Vec::new(),
@@ -126,14 +125,11 @@ impl Workbook {
         }
 
         if let Some(xlsx_file) = &self.xlsx_file {
-            eprintln!("writing to {}", xlsx_file);
             let mut file = File::create(xlsx_file).unwrap();
             file.write_all(&buf)?;
 
             Ok(None)
         } else {
-            eprintln!("Returning a buffer");
-
             Ok(Some(buf))
         }
     }
