@@ -54,13 +54,12 @@ pub enum CellValue {
     SharedString(String),
 }
 
-pub struct SheetWriter<'a, 'b, Writer>
+pub struct SheetWriter<'a, 'b>
 where
     'b: 'a,
-    Writer: 'b,
 {
     sheet: &'a mut Sheet,
-    writer: &'b mut Writer,
+    writer: &'b mut Vec<u8>,
     shared_strings: &'b mut crate::SharedStrings,
 }
 
@@ -146,7 +145,7 @@ impl Row {
         for c in self.cells.iter() {
             c.write(self.row_index, writer)?;
         }
-        writer.write_all("\n</row>\n".as_bytes())
+        writer.write_all(b"\n</row>\n")
     }
 
     pub fn replace_strings(mut self, shared: &mut crate::SharedStrings) -> Self {
@@ -171,19 +170,16 @@ impl ToCellValue for CellValue {
 
 fn write_value(cv: &CellValue, ref_id: String, writer: &mut dyn Write) -> Result<()> {
     match cv {
-        &CellValue::Bool(b) => {
-            let v = match b {
-                true => 1,
-                false => 0,
-            };
+        CellValue::Bool(b) => {
+            let v = if *b { 1 } else { 0 };
             let s = format!("<c r=\"{}\" t=\"b\"><v>{}</v></c>", ref_id, v);
             writer.write_all(s.as_bytes())?;
         }
-        &CellValue::Number(num) => {
+        CellValue::Number(num) => {
             let s = format!("<c r=\"{}\" ><v>{}</v></c>", ref_id, num);
             writer.write_all(s.as_bytes())?;
         }
-        &CellValue::String(ref s) => {
+        CellValue::String(ref s) => {
             let s = format!(
                 "<c r=\"{}\" t=\"str\"><v>{}</v></c>",
                 ref_id,
@@ -191,11 +187,11 @@ fn write_value(cv: &CellValue, ref_id: String, writer: &mut dyn Write) -> Result
             );
             writer.write_all(s.as_bytes())?;
         }
-        &CellValue::SharedString(ref s) => {
+        CellValue::SharedString(ref s) => {
             let s = format!("<c r=\"{}\" t=\"s\"><v>{}</v></c>", ref_id, s);
             writer.write_all(s.as_bytes())?;
         }
-        &CellValue::Blank(_) => {}
+        CellValue::Blank(_) => {}
     }
     Ok(())
 }
@@ -238,11 +234,8 @@ pub fn column_letter(column_index: usize) -> String {
 
 pub fn validate_name(name: &str) -> String {
     let mut name = escape_xml(name);
-    let boundry = match name.is_char_boundary(30) {
-        true => 30,
-        false => 29,
-    };
-    name.truncate(boundry);
+    let boundary = if name.is_char_boundary(30) { 30 } else { 29 };
+    name.truncate(boundary);
     name.replace("/", "-")
 }
 
@@ -287,7 +280,7 @@ impl Sheet {
             return Ok(());
         }
 
-        writer.write_all("\n<cols>\n".as_bytes())?;
+        writer.write_all(b"\n<cols>\n")?;
         let mut i = 1;
         for col in self.columns.iter() {
             writer.write_all(
@@ -299,32 +292,28 @@ impl Sheet {
             )?;
             i += 1;
         }
-        writer.write_all("</cols>\n".as_bytes())
+        writer.write_all(b"</cols>\n")
     }
 
     fn write_data_begin(&self, writer: &mut dyn Write) -> Result<()> {
-        writer.write_all("\n<sheetData>\n".as_bytes())
+        writer.write_all(b"\n<sheetData>\n")
     }
 
     fn write_data_end(&self, writer: &mut dyn Write) -> Result<()> {
-        writer.write_all("\n</sheetData>\n".as_bytes())
+        writer.write_all(b"\n</sheetData>\n")
     }
 
     fn close(&self, writer: &mut dyn Write) -> Result<()> {
-        let foot = "</worksheet>\n";
-        writer.write_all(foot.as_bytes())
+        writer.write_all(b"</worksheet>\n")
     }
 }
 
-impl<'a, 'b, Writer> SheetWriter<'a, 'b, Writer>
-where
-    Writer: Write + Sized,
-{
+impl<'a, 'b> SheetWriter<'a, 'b> {
     pub fn new(
         sheet: &'a mut Sheet,
-        writer: &'b mut Writer,
+        writer: &'b mut Vec<u8>,
         shared_strings: &'b mut crate::SharedStrings,
-    ) -> SheetWriter<'a, 'b, Writer> {
+    ) -> SheetWriter<'a, 'b> {
         SheetWriter {
             sheet,
             writer,
@@ -342,7 +331,7 @@ where
 
     pub fn write<F>(&mut self, write_data: F) -> Result<()>
     where
-        F: FnOnce(&mut SheetWriter<Writer>) -> Result<()> + Sized,
+        F: FnOnce(&mut SheetWriter) -> Result<()> + Sized,
     {
         self.sheet.write_head(self.writer)?;
 
