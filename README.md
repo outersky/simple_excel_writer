@@ -47,6 +47,18 @@ fn main() {
 
 ## Change Log
 
+#### 0.1.7 (2020-04-29)
+- support create-in-memory mode, thanks to Maxburke.
+
+```
+This change creates all worksheet files in-memory and only writes them
+to disk once the XLSX file is closed.
+
+A new option for creating a version that is in-memory only is available
+with `Worksheet::create_in_memory()` which returns the buffer holding
+the completed XLSX file contents when closed.
+```
+
 #### 0.1.6 (2020-04-06)
 - support shared strings between worksheets, thanks to Mikael Edlund.
 
