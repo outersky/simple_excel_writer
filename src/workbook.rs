@@ -1,15 +1,18 @@
-use std::fs::{self, File};
+use std::fs::File;
 use std::io::*;
 use std::path::*;
 
-use utilities::zip_files;
-
 use super::{Sheet, SheetWriter};
+
+struct ArchiveFile {
+    name: PathBuf,
+    data: Vec<u8>,
+}
 
 #[derive(Default)]
 pub struct Workbook {
-    pub file: String,
-    tmp_dir: String,
+    xlsx_file: Option<String>,
+    archive_files: Vec<ArchiveFile>,
     max_sheet_index: usize,
     shared_strings: SharedStrings,
     sheets: Vec<SheetRef>,
@@ -50,10 +53,10 @@ impl SharedStrings {
         self.count += 1;
     }
     /// Takes a string value checks if it's present in shared strings and returns a CellValue with the index
-    pub fn register(&mut self, val: &String) -> crate::CellValue {
+    pub fn register(&mut self, val: &str) -> crate::CellValue {
         self.add_count();
-        
-        match self.strings.iter().position(|v|v==val) {
+
+        match self.strings.iter().position(|v| v == val) {
             Some(idx) => crate::sheet::CellValue::SharedString(format!("{}", idx)),
             None => {
                 self.strings.push(val.to_owned());
@@ -65,42 +68,34 @@ impl SharedStrings {
 
 impl Workbook {
     /// Creates a workbook using shared strings
-    pub fn create(xlsx_file: &str) -> Workbook {
-        let target_dir = format!("{}_tmp", &xlsx_file);
-
-        let workbook = Workbook {
-            file: xlsx_file.to_owned(),
-            tmp_dir: target_dir,
+    pub fn create(xlsx_file: &str) -> Self {
+        Self {
+            xlsx_file: Some(xlsx_file.to_owned()),
+            archive_files: Vec::new(),
             max_sheet_index: 0,
             shared_strings: SharedStrings::new(),
             ..Default::default()
-        };
-
-        if Path::new(&workbook.tmp_dir).is_dir() {
-            fs::remove_dir_all(&workbook.tmp_dir).unwrap();
         }
-        fs::create_dir(&workbook.tmp_dir).unwrap();
-
-        workbook
     }
     /// Creates a workbook not using shared strings
-    pub fn create_simple(xlsx_file: &str) -> Workbook {
-        let target_dir = format!("{}_tmp", &xlsx_file);
-
-        let workbook = Workbook {
-            file: xlsx_file.to_owned(),
-            tmp_dir: target_dir,
+    pub fn create_simple(xlsx_file: &str) -> Self {
+        Self {
+            xlsx_file: Some(xlsx_file.to_owned()),
+            archive_files: Vec::new(),
             max_sheet_index: 0,
             shared_strings: SharedStrings::new_unused(),
             ..Default::default()
-        };
-
-        if Path::new(&workbook.tmp_dir).is_dir() {
-            fs::remove_dir_all(&workbook.tmp_dir).unwrap();
         }
-        fs::create_dir(&workbook.tmp_dir).unwrap();
+    }
 
-        workbook
+    pub fn create_in_memory() -> Self {
+        Self {
+            xlsx_file: None,
+            archive_files: Vec::new(),
+            max_sheet_index: 0,
+            shared_strings: SharedStrings::new_unused(),
+            ..Default::default()
+        }
     }
 
     pub fn create_sheet(&mut self, sheet_name: &str) -> Sheet {
@@ -113,91 +108,137 @@ impl Workbook {
         Sheet::new(self.max_sheet_index, sheet_name)
     }
 
-    pub fn close(&mut self) -> Result<()> {
+    pub fn close(&mut self) -> Result<Option<Vec<u8>>> {
         self.create_files().expect("Create files error!");
 
-        // zip the files in the working directory
-        zip_files(&self.tmp_dir, &self.file)?;
+        let mut buf = Vec::new();
+        {
+            let mut cursor = Cursor::new(&mut buf);
+            let mut writer = zip::ZipWriter::new(&mut cursor);
+            for archive_file in self.archive_files.iter() {
+                let options = zip::write::FileOptions::default();
+                writer.start_file_from_path(&archive_file.name, options)?;
+                writer.write_all(&archive_file.data)?;
+            }
 
-        fs::remove_dir_all(&self.tmp_dir)
+            writer.finish()?;
+        }
+
+        if let Some(xlsx_file) = &self.xlsx_file {
+            let mut file = File::create(xlsx_file).unwrap();
+            file.write_all(&buf)?;
+
+            Ok(None)
+        } else {
+            Ok(Some(buf))
+        }
     }
 
     fn create_files(&mut self) -> Result<()> {
-        let mut root = PathBuf::from(&self.tmp_dir);
+        let mut root = PathBuf::new();
 
         // [Content_Types].xml
         root.push("[Content_Types].xml");
-        let writer = &mut File::create(root.as_path()).unwrap();
-        self.create_content_types(writer)?;
+        let mut writer = Vec::new();
+        self.create_content_types(&mut writer)?;
+        self.archive_files.push(ArchiveFile {
+            name: root.clone(),
+            data: writer,
+        });
         root.pop();
 
         // _rels/.rels
         root.push("_rels");
-        fs::create_dir(root.as_path())?;
         root.push(".rels");
-        let writer = &mut File::create(root.as_path())?;
-        Self::create_rels(writer)?;
+        let mut writer = Vec::new();
+        Self::create_rels(&mut writer)?;
+        self.archive_files.push(ArchiveFile {
+            name: root.clone(),
+            data: writer,
+        });
         root.pop();
         root.pop();
 
         // docProps
         root.push("docProps");
-        fs::create_dir(root.as_path())?;
         root.push("app.xml");
-        let writer = &mut File::create(root.as_path())?;
-        self.create_app(writer)?;
+        let mut writer = Vec::new();
+        self.create_app(&mut writer)?;
+        self.archive_files.push(ArchiveFile {
+            name: root.clone(),
+            data: writer,
+        });
         root.pop();
         root.push("core.xml");
-        let writer = &mut File::create(root.as_path())?;
-        Self::create_core(writer)?;
+        let mut writer = Vec::new();
+        Self::create_core(&mut writer)?;
+        self.archive_files.push(ArchiveFile {
+            name: root.clone(),
+            data: writer,
+        });
         root.pop();
         root.pop();
 
         // xl
         root.push("xl");
-        if !root.as_path().exists() {
-            fs::create_dir(root.as_path()).unwrap();
-        }
         root.push("styles.xml");
-        let writer = &mut File::create(root.as_path())?;
-        Self::create_styles(writer)?;
+        let mut writer = Vec::new();
+        Self::create_styles(&mut writer)?;
+        self.archive_files.push(ArchiveFile {
+            name: root.clone(),
+            data: writer,
+        });
         root.pop();
         //if self.shared_strings.used(){
         root.push("sharedStrings.xml");
-        let writer = &mut File::create(root.as_path())?;
-        self.create_shared_strings(writer)?;
+        let mut writer = Vec::new();
+        self.create_shared_strings(&mut writer)?;
+        self.archive_files.push(ArchiveFile {
+            name: root.clone(),
+            data: writer,
+        });
         root.pop();
         //}
         root.push("workbook.xml");
-        let writer = &mut File::create(root.as_path())?;
-        self.create_workbook(writer)?;
+        let mut writer = Vec::new();
+        self.create_workbook(&mut writer)?;
+        self.archive_files.push(ArchiveFile {
+            name: root.clone(),
+            data: writer,
+        });
         root.pop();
 
         // xl/_rels
         root.push("_rels");
-        fs::create_dir(root.as_path())?;
         root.push("workbook.xml.rels");
-        let writer = &mut File::create(root.as_path())?;
-        self.create_xl_rels(writer)?;
+        let mut writer = Vec::new();
+        self.create_xl_rels(&mut writer)?;
+        self.archive_files.push(ArchiveFile {
+            name: root.clone(),
+            data: writer,
+        });
         root.pop();
         root.pop();
 
         // xl/theme
         root.push("theme");
-        fs::create_dir(root.as_path())?;
         root.push("theme1.xml");
-        let writer = &mut File::create(root.as_path())?;
-        Self::create_xl_theme(writer)?;
+        let mut writer = Vec::new();
+        Self::create_xl_theme(&mut writer)?;
+        self.archive_files.push(ArchiveFile {
+            name: root.clone(),
+            data: writer,
+        });
         root.pop();
         root.pop();
 
         /*
                 // xl/worksheets
                 root.push("worksheets");
-                fs::create_dir(root.as_path())?;
                 root.push("sheet1.xml");
-                let writer = &mut File::create(root.as_path())?;
-                Self::create_sample_sheet(writer)?;
+                let mut writer = Vec::new();
+                Self::create_sample_sheet(&mut writer)?;
+                self.archive_files.push(ArchiveFile {name: root.clone(), data: writer});
                 root.pop();
                 root.pop();
         */
@@ -206,17 +247,21 @@ impl Workbook {
 
     pub fn write_sheet<F>(&mut self, sheet: &mut Sheet, write_data: F) -> Result<()>
     where
-        F: FnOnce(&mut SheetWriter<File>) -> Result<()> + Sized,
+        F: FnOnce(&mut SheetWriter) -> Result<()> + Sized,
     {
-        let mut root = PathBuf::from(&self.tmp_dir);
+        let mut root = PathBuf::new();
         root.push("xl");
         root.push("worksheets");
-        fs::create_dir_all(root.as_path())?;
         root.push(format!("sheet{}.xml", sheet.id));
-        let writer = &mut File::create(root.as_path()).unwrap();
 
-        let sw = &mut SheetWriter::new(sheet, writer, &mut self.shared_strings);
-        sw.write(write_data)
+        let mut writer = Vec::new();
+        let sw = &mut SheetWriter::new(sheet, &mut writer, &mut self.shared_strings);
+        sw.write(write_data)?;
+        self.archive_files.push(ArchiveFile {
+            name: root,
+            data: writer,
+        });
+        Ok(())
     }
 
     fn create_content_types(&mut self, writer: &mut dyn Write) -> Result<()> {
@@ -390,9 +435,10 @@ impl Workbook {
         writer.write_all(sst.as_bytes())?;
         // might have to use a vector instead to ensure index
         for sf in shared_strings.strings.iter() {
-            let space = match sf.trim().len() < sf.len() {
-                true => format!("t xml:space=\"preserve\""),
-                false => format!("t"),
+            let space = if sf.trim().len() < sf.len() {
+                "t xml:space=\"preserve\""
+            } else {
+                "t"
             };
             let xmls = format!("<si><{}>{}</{}></si>", space, sf, "t");
             writer.write_all(xmls.as_bytes())?;
