@@ -16,6 +16,7 @@ pub struct Workbook {
     max_sheet_index: usize,
     shared_strings: SharedStrings,
     sheets: Vec<SheetRef>,
+    calc_chain: Vec<(String, usize)>,
 }
 
 #[derive(Default, Clone)]
@@ -207,6 +208,15 @@ impl Workbook {
             data: writer,
         });
         root.pop();
+        
+        root.push("calcChain.xml");
+        let mut writer = Vec::new();
+        self.create_calc_chain(&mut writer)?;
+        self.archive_files.push(ArchiveFile {
+            name: root.clone(),
+            data: writer,
+        });
+        root.pop();
 
         // xl/_rels
         root.push("_rels");
@@ -253,6 +263,9 @@ impl Workbook {
         root.push("xl");
         root.push("worksheets");
         root.push(format!("sheet{}.xml", sheet.id));
+        for cc in &sheet.calc_chain {
+            self.calc_chain.push((cc.to_owned(), sheet.id));
+        }
 
         let mut writer = Vec::new();
         let sw = &mut SheetWriter::new(sheet, &mut writer, &mut self.shared_strings);
@@ -262,6 +275,21 @@ impl Workbook {
             data: writer,
         });
         Ok(())
+    }
+
+    fn create_calc_chain(&mut self, writer: &mut dyn Write) -> Result<()> {
+        let xml = br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<calcChain xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">"#;
+        writer.write_all(xml)?;
+        for x in &self.calc_chain {
+            let wb = format!(
+                "<c r=\"{}\" i=\"{}\"/>",
+                x.0, x.1
+            );
+            writer.write_all(wb.as_bytes())?;
+        }
+        let tail = br#"</calcChain>"#;
+        writer.write_all(tail)
     }
 
     fn create_content_types(&mut self, writer: &mut dyn Write) -> Result<()> {

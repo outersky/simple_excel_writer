@@ -2,7 +2,7 @@ extern crate simple_excel_writer as excel;
 
 use excel::*;
 fn main() {
-    let mut wb = Workbook::create("/tmp/b.xlsx");
+    let mut wb = Workbook::create("./tmp/b.xlsx");
     let mut sheet = wb.create_sheet("SheetName");
 
     // set column width
@@ -29,7 +29,8 @@ fn main() {
     wb.write_sheet(&mut sheet, |sheet_writer| {
         let sw = sheet_writer;
         sw.append_row(row!["Name", "Title", "Success", "Remark"])?;
-        sw.append_row(row!["Amy", "Manager", true])
+        sw.append_row(row!["Amy", "Manager", true])?;
+        sw.append_row(row![1.0, 2.0, 3.0, 4.1, "=sum(a3:d3)"])
     })
     .expect("write excel error!");
 
