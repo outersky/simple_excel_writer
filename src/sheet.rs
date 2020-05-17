@@ -1,4 +1,4 @@
-use std::io::{Result, Write};
+use std::io::{Error, ErrorKind, Result, Write};
 
 #[macro_export]
 macro_rules! row {
@@ -28,6 +28,7 @@ pub struct Sheet {
     pub columns: Vec<Column>,
     max_row_index: usize,
     pub calc_chain: Vec<String>,
+    pub merged_cells: Vec<MergedCell>,
 }
 
 #[derive(Default)]
@@ -41,6 +42,11 @@ pub struct Row {
 pub struct Cell {
     pub column_index: usize,
     pub value: CellValue,
+}
+
+pub struct MergedCell {
+    pub start_ref: String,
+    pub end_ref: String,
 }
 
 pub struct Column {
@@ -113,6 +119,19 @@ impl Row {
         }
     }
 
+    pub fn from_iter<T>(iter: impl Iterator<Item = T>) -> Row
+    where
+        T: ToCellValue + Sized,
+    {
+        let mut row = Row::new();
+
+        for val in iter {
+            row.add_cell(val)
+        }
+
+        row
+    }
+
     pub fn add_cell<T>(&mut self, value: T)
     where
         T: ToCellValue + Sized,
@@ -126,7 +145,7 @@ impl Row {
                     column_index: self.max_col_index,
                     value,
                 })
-            },
+            }
             CellValue::Blank(cols) => self.max_col_index += cols,
             _ => {
                 self.max_col_index += 1;
@@ -211,7 +230,7 @@ fn write_value(cv: &CellValue, ref_id: String, writer: &mut dyn Write) -> Result
                 escape_xml(&s)
             );
             writer.write_all(s.as_bytes())?;
-        },
+        }
         CellValue::SharedString(ref s) => {
             let s = format!("<c r=\"{}\" t=\"s\"><v>{}</v></c>", ref_id, s);
             writer.write_all(s.as_bytes())?;
@@ -231,9 +250,24 @@ fn escape_xml(str: &str) -> String {
 
 impl Cell {
     fn write(&self, row_index: usize, writer: &mut dyn Write) -> Result<()> {
-        let ref_id = format!("{}{}", column_letter(self.column_index), row_index);
-        write_value(&self.value, ref_id, writer)
+        write_value(&self.value, ref_id(self.column_index, row_index), writer)
     }
+}
+
+impl MergedCell {
+    fn write(&self, writer: &mut dyn Write) -> Result<()> {
+        write!(
+            writer,
+            "<mergeCell ref=\"{}:{}\" />",
+            self.start_ref, self.end_ref
+        )?;
+
+        Ok(())
+    }
+}
+
+pub fn ref_id(column_index: usize, row_index: usize) -> String {
+    format!("{}{}", column_letter(column_index), row_index)
 }
 
 /**
@@ -321,6 +355,19 @@ impl Sheet {
         writer.write_all(b"</cols>\n")
     }
 
+    fn write_merged_cells(&self, writer: &mut dyn Write) -> Result<()> {
+        if !self.merged_cells.is_empty() {
+            write!(writer, "<mergeCells count=\"{}\">", self.merged_cells.len())?;
+            for merged_cell in self.merged_cells.iter() {
+                merged_cell.write(writer)?;
+            }
+            write!(writer, "</mergeCells>")?;
+        }
+        writer.flush()?;
+
+        Ok(())
+    }
+
     fn write_data_begin(&self, writer: &mut dyn Write) -> Result<()> {
         writer.write_all(b"\n<sheetData>\n")
     }
@@ -351,8 +398,42 @@ impl<'a, 'b> SheetWriter<'a, 'b> {
         self.sheet
             .write_row(self.writer, row.replace_strings(&mut self.shared_strings))
     }
+
     pub fn append_blank_rows(&mut self, rows: usize) {
         self.sheet.write_blank_rows(rows)
+    }
+
+    /// Merges the range between `start` and `end` cells, specified as 1-based `(column, row)` pairs.
+    /// For example, `(1, 2)` is equivalent to cell `A2`.
+    pub fn merge_cells(&mut self, start: (usize, usize), end: (usize, usize)) -> Result<()> {
+        if end.0 >= start.0 && end.1 >= start.1 {
+            self.sheet.merged_cells.push(MergedCell {
+                start_ref: ref_id(start.0, start.1),
+                end_ref: ref_id(end.0, end.1),
+            });
+
+            Ok(())
+        } else {
+            Err(Error::new(ErrorKind::Other, "invalid range"))
+        }
+    }
+
+    /// Merges the range between `start_ref` and `end_ref` cells, specified as cell ref IDs (e.g.
+    /// `B3`).
+    pub fn merge_range(&mut self, start_ref: String, end_ref: String) -> Result<()> {
+        self.sheet
+            .merged_cells
+            .push(MergedCell { start_ref, end_ref });
+
+        Ok(())
+    }
+
+    /// Merges cells in a `width` by `height` range beginning at `start`.
+    /// Arguments `width` and `height` specify the final size of the merged range, so specifying
+    /// `1` for each would result in a single cell with no change, and specifying `0` for either is
+    /// invalid.
+    pub fn merge_area(&mut self, start: (usize, usize), width: usize, height: usize) -> Result<()> {
+        self.merge_cells(start, (start.0 + width - 1, start.1 + height - 1))
     }
 
     pub fn write<F>(&mut self, write_data: F) -> Result<()>
@@ -366,6 +447,7 @@ impl<'a, 'b> SheetWriter<'a, 'b> {
         write_data(self)?;
 
         self.sheet.write_data_end(self.writer)?;
+        self.sheet.write_merged_cells(self.writer)?;
         self.sheet.close(self.writer)
     }
 }
