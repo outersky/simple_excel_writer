@@ -27,6 +27,7 @@ pub struct Sheet {
     pub name: String,
     pub columns: Vec<Column>,
     max_row_index: usize,
+    pub calc_chain: Vec<String>,
 }
 
 #[derive(Default)]
@@ -34,6 +35,7 @@ pub struct Row {
     pub cells: Vec<Cell>,
     row_index: usize,
     max_col_index: usize,
+    calc_chain: Vec<String>,
 }
 
 pub struct Cell {
@@ -50,6 +52,7 @@ pub enum CellValue {
     Bool(bool),
     Number(f64),
     String(String),
+    Formula(String),
     Blank(usize),
     SharedString(String),
 }
@@ -81,12 +84,18 @@ impl ToCellValue for f64 {
 
 impl ToCellValue for String {
     fn to_cell_value(&self) -> CellValue {
+        if self.starts_with("=") {
+            return CellValue::Formula(self.to_owned());
+        }
         CellValue::String(self.to_owned())
     }
 }
 
 impl<'a> ToCellValue for &'a str {
     fn to_cell_value(&self) -> CellValue {
+        if self.starts_with("=") {
+            return CellValue::Formula(self.to_owned().to_string());
+        }
         CellValue::String(self.to_owned().to_owned())
     }
 }
@@ -109,7 +118,15 @@ impl Row {
         T: ToCellValue + Sized,
     {
         let value = value.to_cell_value();
-        match value {
+        match &value {
+            CellValue::Formula(f) => {
+                self.calc_chain.push(f.to_owned());
+                self.max_col_index += 1;
+                self.cells.push(Cell {
+                    column_index: self.max_col_index,
+                    value,
+                })
+            },
             CellValue::Blank(cols) => self.max_col_index += cols,
             _ => {
                 self.max_col_index += 1;
@@ -187,6 +204,14 @@ fn write_value(cv: &CellValue, ref_id: String, writer: &mut dyn Write) -> Result
             );
             writer.write_all(s.as_bytes())?;
         }
+        CellValue::Formula(ref s) => {
+            let s = format!(
+                "<c r=\"{}\" t=\"str\"><f>{}</f></c>",
+                ref_id,
+                escape_xml(&s)
+            );
+            writer.write_all(s.as_bytes())?;
+        },
         CellValue::SharedString(ref s) => {
             let s = format!("<c r=\"{}\" t=\"s\"><v>{}</v></c>", ref_id, s);
             writer.write_all(s.as_bytes())?;
@@ -258,6 +283,7 @@ impl Sheet {
     {
         self.max_row_index += 1;
         row.row_index = self.max_row_index;
+        self.calc_chain.append(&mut row.calc_chain);
         row.write(writer)
     }
 
