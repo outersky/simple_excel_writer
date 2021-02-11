@@ -106,6 +106,28 @@ impl ToCellValue for () {
     }
 }
 
+#[cfg(feature = "chrono")]
+impl ToCellValue for chrono::NaiveDateTime {
+    fn to_cell_value(&self) -> CellValue {
+        let seconds = self.timestamp();
+        let nanos = f64::from(self.timestamp_subsec_nanos()) * 1e-9;
+        let unix_seconds = seconds as f64 + nanos;
+        let unix_days = unix_seconds / 86400.;
+        CellValue::Number(unix_days + 25569.)
+    }
+}
+
+#[cfg(feature = "chrono")]
+impl ToCellValue for chrono::NaiveDate {
+    fn to_cell_value(&self) -> CellValue {
+        use chrono::Datelike;
+        const UNIX_EPOCH_DAY: i32 = 719_163;
+
+        let unix_days: f64 = (self.num_days_from_ce() - UNIX_EPOCH_DAY).into();
+        CellValue::Number(unix_days + 25569.)
+    }
+}
+
 impl Row {
     pub fn new() -> Row {
         Row {
@@ -367,5 +389,45 @@ impl<'a, 'b> SheetWriter<'a, 'b> {
 
         self.sheet.write_data_end(self.writer)?;
         self.sheet.close(self.writer)
+    }
+}
+
+#[cfg(test)]
+#[cfg(feature = "chrono")]
+mod chrono_tests {
+    use chrono::NaiveDate;
+
+    use super::*;
+
+    #[test]
+    fn chrono_datetime() {
+        const EXPECTED: f64 = 41223.63725694444;
+        let cell = NaiveDate::from_ymd(2012, 11, 10)
+            .and_hms(15, 17, 39)
+            .to_cell_value();
+
+        match cell {
+            CellValue::Number(n) if n == EXPECTED => {}
+            CellValue::Number(n) => panic!(
+                "invalid chrono::NaiveDateTime conversion to CellValue. {} is expected, found {}",
+                EXPECTED, n
+            ),
+            _ => panic!("invalid chrono::NaiveDateTime conversion to CellValue"),
+        }
+    }
+
+    #[test]
+    fn chrono_date() {
+        const EXPECTED: f64 = 41223.;
+        let cell = NaiveDate::from_ymd(2012, 11, 10).to_cell_value();
+
+        match cell {
+            CellValue::Number(n) if n == EXPECTED => {}
+            CellValue::Number(n) => panic!(
+                "invalid chrono::NaiveDate conversion to CellValue. {} is expected, found {}",
+                EXPECTED, n
+            ),
+            _ => panic!("invalid chrono::NaiveDate conversion to CellValue"),
+        }
     }
 }
