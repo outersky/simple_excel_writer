@@ -421,6 +421,7 @@ impl Workbook {
     <cellXfs count="2">
         <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
         <xf numFmtId="14" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
+        <xf numFmtId="22" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
     </cellXfs>
     <cellStyles count="1">
         <cellStyle name="Normal" xfId="0" builtinId="0"/>

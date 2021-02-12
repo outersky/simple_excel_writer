@@ -51,6 +51,10 @@ pub struct Column {
 pub enum CellValue {
     Bool(bool),
     Number(f64),
+    #[cfg(feature = "chrono")]
+    Date(f64),
+    #[cfg(feature = "chrono")]
+    Datetime(f64),
     String(String),
     Formula(String),
     Blank(usize),
@@ -113,7 +117,7 @@ impl ToCellValue for chrono::NaiveDateTime {
         let nanos = f64::from(self.timestamp_subsec_nanos()) * 1e-9;
         let unix_seconds = seconds as f64 + nanos;
         let unix_days = unix_seconds / 86400.;
-        CellValue::Number(unix_days + 25569.)
+        CellValue::Datetime(unix_days + 25569.)
     }
 }
 
@@ -124,7 +128,7 @@ impl ToCellValue for chrono::NaiveDate {
         const UNIX_EPOCH_DAY: i32 = 719_163;
 
         let unix_days: f64 = (self.num_days_from_ce() - UNIX_EPOCH_DAY).into();
-        CellValue::Number(unix_days + 25569.)
+        CellValue::Date(unix_days + 25569.)
     }
 }
 
@@ -214,10 +218,11 @@ fn write_value(cv: &CellValue, ref_id: String, writer: &mut dyn Write) -> Result
             let s = format!("<c r=\"{}\" t=\"b\"><v>{}</v></c>", ref_id, v);
             writer.write_all(s.as_bytes())?;
         }
-        CellValue::Number(num) => {
-            let s = format!("<c r=\"{}\" ><v>{}</v></c>", ref_id, num);
-            writer.write_all(s.as_bytes())?;
-        }
+        &CellValue::Number(num) => write_number(&ref_id, num, None, writer)?,
+        #[cfg(feature = "chrono")]
+        &CellValue::Date(num) => write_number(&ref_id, num, Some(1), writer)?,
+        #[cfg(feature = "chrono")]
+        &CellValue::Datetime(num) => write_number(&ref_id, num, Some(2), writer)?,
         CellValue::String(ref s) => {
             let s = format!(
                 "<c r=\"{}\" t=\"str\"><v>{}</v></c>",
@@ -241,6 +246,22 @@ fn write_value(cv: &CellValue, ref_id: String, writer: &mut dyn Write) -> Result
         CellValue::Blank(_) => {}
     }
     Ok(())
+}
+
+fn write_number(
+    ref_id: &str,
+    value: f64,
+    style: Option<u16>,
+    writer: &mut dyn Write,
+) -> Result<()> {
+    match style {
+        Some(style) => write!(
+            writer,
+            r#"<c r="{}" s="{}"><v>{}</v></c>"#,
+            ref_id, style, value
+        ),
+        None => write!(writer, r#"<c r="{}"><v>{}</v></c>"#, ref_id, value),
+    }
 }
 
 fn escape_xml(str: &str) -> String {
@@ -407,8 +428,8 @@ mod chrono_tests {
             .to_cell_value();
 
         match cell {
-            CellValue::Number(n) if n == EXPECTED => {}
-            CellValue::Number(n) => panic!(
+            CellValue::Datetime(n) if n == EXPECTED => {}
+            CellValue::Datetime(n) => panic!(
                 "invalid chrono::NaiveDateTime conversion to CellValue. {} is expected, found {}",
                 EXPECTED, n
             ),
@@ -422,8 +443,8 @@ mod chrono_tests {
         let cell = NaiveDate::from_ymd(2012, 11, 10).to_cell_value();
 
         match cell {
-            CellValue::Number(n) if n == EXPECTED => {}
-            CellValue::Number(n) => panic!(
+            CellValue::Date(n) if n == EXPECTED => {}
+            CellValue::Date(n) => panic!(
                 "invalid chrono::NaiveDate conversion to CellValue. {} is expected, found {}",
                 EXPECTED, n
             ),
