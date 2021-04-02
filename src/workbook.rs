@@ -17,6 +17,7 @@ pub struct Workbook {
     shared_strings: SharedStrings,
     sheets: Vec<SheetRef>,
     calc_chain: Vec<(String, usize)>,
+    saved: bool,
 }
 
 #[derive(Default, Clone)]
@@ -75,7 +76,9 @@ impl Workbook {
             archive_files: Vec::new(),
             max_sheet_index: 0,
             shared_strings: SharedStrings::new(),
-            ..Default::default()
+            sheets: Vec::new(),
+            calc_chain: Vec::new(),
+            saved: false,
         }
     }
     /// Creates a workbook not using shared strings
@@ -85,7 +88,9 @@ impl Workbook {
             archive_files: Vec::new(),
             max_sheet_index: 0,
             shared_strings: SharedStrings::new_unused(),
-            ..Default::default()
+            sheets: Vec::new(),
+            calc_chain: Vec::new(),
+            saved: false,
         }
     }
 
@@ -95,7 +100,9 @@ impl Workbook {
             archive_files: Vec::new(),
             max_sheet_index: 0,
             shared_strings: SharedStrings::new_unused(),
-            ..Default::default()
+            sheets: Vec::new(),
+            calc_chain: Vec::new(),
+            saved: false,
         }
     }
 
@@ -138,6 +145,7 @@ impl Workbook {
         if let Some(xlsx_file) = &self.xlsx_file {
             let mut file = File::create(xlsx_file).unwrap();
             file.write_all(&buf)?;
+            self.saved = true;
 
             Ok(None)
         } else {
@@ -901,4 +909,12 @@ impl Workbook {
             writer.write_all(xml.as_bytes())
         }
     */
+}
+
+impl Drop for Workbook {
+    fn drop(&mut self) {
+        if !self.saved && self.xlsx_file.is_some() {
+            self.close().expect("Workbook saving error");
+        }
+    }
 }
