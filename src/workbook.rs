@@ -102,11 +102,21 @@ impl Workbook {
     pub fn create_sheet(&mut self, sheet_name: &str) -> Sheet {
         self.max_sheet_index += 1;
 
+        let validated_name = crate::validate_name(sheet_name);
+
         self.sheets.push(SheetRef {
             id: self.max_sheet_index,
-            name: crate::validate_name(sheet_name), //sheet_name.to_owned(),
+            name: validated_name.clone(),
         });
-        Sheet::new(self.max_sheet_index, sheet_name)
+
+        // `Sheet` has a private field, so we can't just construct it here with needed values.
+        // So we must create default sheet first and then mutate it.
+        let mut sheet = Sheet::default();
+
+        sheet.id = self.max_sheet_index;
+        sheet.name = validated_name;
+
+        sheet
     }
 
     pub fn close(&mut self) -> Result<Option<Vec<u8>>> {
