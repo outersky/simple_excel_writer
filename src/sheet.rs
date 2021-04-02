@@ -258,10 +258,7 @@ pub fn column_letter(column_index: usize) -> String {
 }
 
 pub fn validate_name(name: &str) -> String {
-    let mut name = escape_xml(name);
-    let boundary = if name.is_char_boundary(30) { 30 } else { 29 };
-    name.truncate(boundary);
-    name.replace("/", "-")
+    escape_xml(name).replace("/", "-")
 }
 
 impl Sheet {
