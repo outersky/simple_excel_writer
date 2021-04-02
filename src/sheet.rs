@@ -84,7 +84,7 @@ impl ToCellValue for f64 {
 
 impl ToCellValue for String {
     fn to_cell_value(&self) -> CellValue {
-        if self.starts_with("=") {
+        if self.starts_with('=') {
             return CellValue::Formula(self.to_owned());
         }
         CellValue::String(self.to_owned())
@@ -93,10 +93,10 @@ impl ToCellValue for String {
 
 impl<'a> ToCellValue for &'a str {
     fn to_cell_value(&self) -> CellValue {
-        if self.starts_with("=") {
-            return CellValue::Formula(self.to_owned().to_string());
+        if self.starts_with('=') {
+            return CellValue::Formula(self.to_string());
         }
-        CellValue::String(self.to_owned().to_owned())
+        CellValue::String(self.to_string())
     }
 }
 
