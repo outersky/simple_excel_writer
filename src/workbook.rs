@@ -118,7 +118,7 @@ impl Workbook {
             let mut writer = zip::ZipWriter::new(&mut cursor);
             for archive_file in self.archive_files.iter() {
                 let options = zip::write::FileOptions::default();
-                writer.start_file_from_path(&archive_file.name, options)?;
+                writer.start_file(archive_file.name.to_string_lossy(), options)?;
                 writer.write_all(&archive_file.data)?;
             }
 
