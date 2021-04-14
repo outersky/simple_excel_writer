@@ -1,4 +1,4 @@
-use std::fs::File;
+use std::{borrow::Borrow, fs::File};
 use std::io::*;
 use std::path::*;
 
@@ -7,6 +7,22 @@ use super::{Sheet, SheetWriter};
 struct ArchiveFile {
     name: PathBuf,
     data: Vec<u8>,
+}
+
+fn path_format(path: &std::path::Path) -> String {
+    let buf = String::with_capacity(path.as_os_str().len());
+
+    path.components().fold(buf, |mut buf, comp| {
+        if let std::path::Component::Normal(s) = comp {
+            if !buf.is_empty() {
+                buf.push('/');
+            }
+
+            buf.push_str(s.to_string_lossy().borrow());
+        }
+        
+        buf
+    })
 }
 
 #[derive(Default)]
@@ -135,7 +151,7 @@ impl Workbook {
             let mut writer = zip::ZipWriter::new(&mut cursor);
             for archive_file in self.archive_files.iter() {
                 let options = zip::write::FileOptions::default();
-                writer.start_file(archive_file.name.to_string_lossy(), options)?;
+                writer.start_file(path_format(&archive_file.name), options)?;
                 writer.write_all(&archive_file.data)?;
             }
 
