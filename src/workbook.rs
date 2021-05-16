@@ -1,4 +1,4 @@
-use std::fs::File;
+use std::{borrow::Borrow, fs::File};
 use std::io::*;
 use std::path::*;
 
@@ -9,6 +9,22 @@ struct ArchiveFile {
     data: Vec<u8>,
 }
 
+fn path_format(path: &std::path::Path) -> String {
+    let buf = String::with_capacity(path.as_os_str().len());
+
+    path.components().fold(buf, |mut buf, comp| {
+        if let std::path::Component::Normal(s) = comp {
+            if !buf.is_empty() {
+                buf.push('/');
+            }
+
+            buf.push_str(s.to_string_lossy().borrow());
+        }
+        
+        buf
+    })
+}
+
 #[derive(Default)]
 pub struct Workbook {
     xlsx_file: Option<String>,
@@ -17,6 +33,7 @@ pub struct Workbook {
     shared_strings: SharedStrings,
     sheets: Vec<SheetRef>,
     calc_chain: Vec<(String, usize)>,
+    saved: bool,
 }
 
 #[derive(Default, Clone)]
@@ -75,7 +92,9 @@ impl Workbook {
             archive_files: Vec::new(),
             max_sheet_index: 0,
             shared_strings: SharedStrings::new(),
-            ..Default::default()
+            sheets: Vec::new(),
+            calc_chain: Vec::new(),
+            saved: false,
         }
     }
     /// Creates a workbook not using shared strings
@@ -85,7 +104,9 @@ impl Workbook {
             archive_files: Vec::new(),
             max_sheet_index: 0,
             shared_strings: SharedStrings::new_unused(),
-            ..Default::default()
+            sheets: Vec::new(),
+            calc_chain: Vec::new(),
+            saved: false,
         }
     }
 
@@ -95,18 +116,30 @@ impl Workbook {
             archive_files: Vec::new(),
             max_sheet_index: 0,
             shared_strings: SharedStrings::new_unused(),
-            ..Default::default()
+            sheets: Vec::new(),
+            calc_chain: Vec::new(),
+            saved: false,
         }
     }
 
     pub fn create_sheet(&mut self, sheet_name: &str) -> Sheet {
         self.max_sheet_index += 1;
 
+        let validated_name = crate::validate_name(sheet_name);
+
         self.sheets.push(SheetRef {
             id: self.max_sheet_index,
-            name: crate::validate_name(sheet_name), //sheet_name.to_owned(),
+            name: validated_name.clone(),
         });
-        Sheet::new(self.max_sheet_index, sheet_name)
+
+        // `Sheet` has a private field, so we can't just construct it here with needed values.
+        // So we must create default sheet first and then mutate it.
+        let mut sheet = Sheet::default();
+
+        sheet.id = self.max_sheet_index;
+        sheet.name = validated_name;
+
+        sheet
     }
 
     pub fn close(&mut self) -> Result<Option<Vec<u8>>> {
@@ -118,7 +151,7 @@ impl Workbook {
             let mut writer = zip::ZipWriter::new(&mut cursor);
             for archive_file in self.archive_files.iter() {
                 let options = zip::write::FileOptions::default();
-                writer.start_file_from_path(&archive_file.name, options)?;
+                writer.start_file(path_format(&archive_file.name), options)?;
                 writer.write_all(&archive_file.data)?;
             }
 
@@ -128,6 +161,7 @@ impl Workbook {
         if let Some(xlsx_file) = &self.xlsx_file {
             let mut file = File::create(xlsx_file).unwrap();
             file.write_all(&buf)?;
+            self.saved = true;
 
             Ok(None)
         } else {
@@ -891,4 +925,12 @@ impl Workbook {
             writer.write_all(xml.as_bytes())
         }
     */
+}
+
+impl Drop for Workbook {
+    fn drop(&mut self) {
+        if !self.saved && self.xlsx_file.is_some() {
+            self.close().expect("Workbook saving error");
+        }
+    }
 }

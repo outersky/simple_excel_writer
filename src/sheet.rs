@@ -84,7 +84,7 @@ impl ToCellValue for f64 {
 
 impl ToCellValue for String {
     fn to_cell_value(&self) -> CellValue {
-        if self.starts_with("=") {
+        if self.starts_with('=') {
             return CellValue::Formula(self.to_owned());
         }
         CellValue::String(self.to_owned())
@@ -93,10 +93,10 @@ impl ToCellValue for String {
 
 impl<'a> ToCellValue for &'a str {
     fn to_cell_value(&self) -> CellValue {
-        if self.starts_with("=") {
-            return CellValue::Formula(self.to_owned().to_string());
+        if self.starts_with('=') {
+            return CellValue::Formula(self.to_string());
         }
-        CellValue::String(self.to_owned().to_owned())
+        CellValue::String(self.to_string())
     }
 }
 
@@ -258,10 +258,7 @@ pub fn column_letter(column_index: usize) -> String {
 }
 
 pub fn validate_name(name: &str) -> String {
-    let mut name = escape_xml(name);
-    let boundary = if name.is_char_boundary(30) { 30 } else { 29 };
-    name.truncate(boundary);
-    name.replace("/", "-")
+    escape_xml(name).replace("/", "-")
 }
 
 impl Sheet {
