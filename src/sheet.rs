@@ -57,6 +57,10 @@ pub struct Column {
 pub enum CellValue {
     Bool(bool),
     Number(f64),
+    #[cfg(feature = "chrono")]
+    Date(f64),
+    #[cfg(feature = "chrono")]
+    Datetime(f64),
     String(String),
     Formula(String),
     Blank(usize),
@@ -109,6 +113,28 @@ impl<'a> ToCellValue for &'a str {
 impl ToCellValue for () {
     fn to_cell_value(&self) -> CellValue {
         CellValue::Blank(1)
+    }
+}
+
+#[cfg(feature = "chrono")]
+impl ToCellValue for chrono::NaiveDateTime {
+    fn to_cell_value(&self) -> CellValue {
+        let seconds = self.timestamp();
+        let nanos = f64::from(self.timestamp_subsec_nanos()) * 1e-9;
+        let unix_seconds = seconds as f64 + nanos;
+        let unix_days = unix_seconds / 86400.;
+        CellValue::Datetime(unix_days + 25569.)
+    }
+}
+
+#[cfg(feature = "chrono")]
+impl ToCellValue for chrono::NaiveDate {
+    fn to_cell_value(&self) -> CellValue {
+        use chrono::Datelike;
+        const UNIX_EPOCH_DAY: i32 = 719_163;
+
+        let unix_days: f64 = (self.num_days_from_ce() - UNIX_EPOCH_DAY).into();
+        CellValue::Date(unix_days + 25569.)
     }
 }
 
@@ -211,10 +237,11 @@ fn write_value(cv: &CellValue, ref_id: String, writer: &mut dyn Write) -> Result
             let s = format!("<c r=\"{}\" t=\"b\"><v>{}</v></c>", ref_id, v);
             writer.write_all(s.as_bytes())?;
         }
-        CellValue::Number(num) => {
-            let s = format!("<c r=\"{}\" ><v>{}</v></c>", ref_id, num);
-            writer.write_all(s.as_bytes())?;
-        }
+        &CellValue::Number(num) => write_number(&ref_id, num, None, writer)?,
+        #[cfg(feature = "chrono")]
+        &CellValue::Date(num) => write_number(&ref_id, num, Some(1), writer)?,
+        #[cfg(feature = "chrono")]
+        &CellValue::Datetime(num) => write_number(&ref_id, num, Some(2), writer)?,
         CellValue::String(ref s) => {
             let s = format!(
                 "<c r=\"{}\" t=\"str\"><v>{}</v></c>",
@@ -238,6 +265,22 @@ fn write_value(cv: &CellValue, ref_id: String, writer: &mut dyn Write) -> Result
         CellValue::Blank(_) => {}
     }
     Ok(())
+}
+
+fn write_number(
+    ref_id: &str,
+    value: f64,
+    style: Option<u16>,
+    writer: &mut dyn Write,
+) -> Result<()> {
+    match style {
+        Some(style) => write!(
+            writer,
+            r#"<c r="{}" s="{}"><v>{}</v></c>"#,
+            ref_id, style, value
+        ),
+        None => write!(writer, r#"<c r="{}"><v>{}</v></c>"#, ref_id, value),
+    }
 }
 
 fn escape_xml(str: &str) -> String {
@@ -446,5 +489,45 @@ impl<'a, 'b> SheetWriter<'a, 'b> {
         self.sheet.write_data_end(self.writer)?;
         self.sheet.write_merged_cells(self.writer)?;
         self.sheet.close(self.writer)
+    }
+}
+
+#[cfg(test)]
+#[cfg(feature = "chrono")]
+mod chrono_tests {
+    use chrono::NaiveDate;
+
+    use super::*;
+
+    #[test]
+    fn chrono_datetime() {
+        const EXPECTED: f64 = 41223.63725694444;
+        let cell = NaiveDate::from_ymd(2012, 11, 10)
+            .and_hms(15, 17, 39)
+            .to_cell_value();
+
+        match cell {
+            CellValue::Datetime(n) if n == EXPECTED => {}
+            CellValue::Datetime(n) => panic!(
+                "invalid chrono::NaiveDateTime conversion to CellValue. {} is expected, found {}",
+                EXPECTED, n
+            ),
+            _ => panic!("invalid chrono::NaiveDateTime conversion to CellValue"),
+        }
+    }
+
+    #[test]
+    fn chrono_date() {
+        const EXPECTED: f64 = 41223.;
+        let cell = NaiveDate::from_ymd(2012, 11, 10).to_cell_value();
+
+        match cell {
+            CellValue::Date(n) if n == EXPECTED => {}
+            CellValue::Date(n) => panic!(
+                "invalid chrono::NaiveDate conversion to CellValue. {} is expected, found {}",
+                EXPECTED, n
+            ),
+            _ => panic!("invalid chrono::NaiveDate conversion to CellValue"),
+        }
     }
 }

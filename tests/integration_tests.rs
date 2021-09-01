@@ -40,7 +40,15 @@ fn creates_and_saves_an_excel_sheet_driver(filename: Option<&str>) -> Option<Vec
 
     wb.write_sheet(&mut ws, |sw| {
         sw.append_row(row!["Name", "Title", "Success"]).unwrap();
-        sw.append_row(row!["Mary", "This", true])
+        sw.append_row(row!["Mary", "This", true]).unwrap();
+
+        #[cfg(feature = "chrono")]
+        sw.append_row(row![
+            chrono::NaiveDate::from_ymd(2020, 10, 15).and_hms(18, 27, 11),
+            chrono::NaiveDate::from_ymd(2020, 10, 16)
+        ])
+        .unwrap();
+        Ok(())
     })
     .expect("Write excel error!");
 

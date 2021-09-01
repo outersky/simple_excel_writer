@@ -53,6 +53,9 @@
 
 extern crate zip;
 
+#[cfg(feature = "chrono")]
+extern crate chrono;
+
 pub use sheet::*;
 pub use workbook::*;
 
