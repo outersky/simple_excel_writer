@@ -47,6 +47,15 @@ fn main() {
 
 ## Change Log
 
+### 0.1.9 (2021-10-28)
+- support formula 
+- support NaiveDate & NaiveDateTime
+- format dates and date times
+- Sheet name validation
+- remove unndecessary bzip2 dependency
+
+many thanks to all contributors !
+
 #### 0.1.7 (2020-04-29)
 - support create-in-memory mode, thanks to Maxburke.
 
