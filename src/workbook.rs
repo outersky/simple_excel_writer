@@ -143,7 +143,7 @@ impl Workbook {
     }
 
     pub fn close(&mut self) -> Result<Option<Vec<u8>>> {
-        self.create_files().expect("Create files error!");
+        self.create_files()?;
 
         let mut buf = Vec::new();
         {
