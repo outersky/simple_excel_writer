@@ -159,7 +159,7 @@ impl Workbook {
         }
 
         if let Some(xlsx_file) = &self.xlsx_file {
-            let mut file = File::create(xlsx_file).unwrap();
+            let mut file = File::create(xlsx_file)?;
             file.write_all(&buf)?;
             self.saved = true;
 
