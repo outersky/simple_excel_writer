@@ -143,7 +143,7 @@ impl Workbook {
     }
 
     pub fn close(&mut self) -> Result<Option<Vec<u8>>> {
-        self.create_files().expect("Create files error!");
+        self.create_files()?;
 
         let mut buf = Vec::new();
         {
@@ -159,7 +159,7 @@ impl Workbook {
         }
 
         if let Some(xlsx_file) = &self.xlsx_file {
-            let mut file = File::create(xlsx_file).unwrap();
+            let mut file = File::create(xlsx_file)?;
             file.write_all(&buf)?;
             self.saved = true;
 
