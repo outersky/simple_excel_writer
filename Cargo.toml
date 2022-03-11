@@ -17,4 +17,4 @@ travis-ci = { repository = "outersky/simple_excel_writer" }
 [dependencies]
 chrono = { version = "0.4.19", optional = true, default-features = false }
 # omit bzip2 feature
-zip = {version = "0.5.13", default-features = false, features = ["deflate", "time"] }
+zip = {version = "0.5.13", default-features = false, features = ["deflate"] }
