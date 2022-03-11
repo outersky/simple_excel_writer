@@ -48,8 +48,6 @@
 //!
 
 #![crate_name = "simple_excel_writer"]
-#![crate_type = "rlib"]
-#![crate_type = "dylib"]
 
 extern crate zip;
 

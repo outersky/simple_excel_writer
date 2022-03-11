@@ -47,6 +47,9 @@ fn main() {
 
 ## Change Log
 
+### 0.2.0 (2022-03-11)
+- support WASM !
+
 ### 0.1.9 (2021-10-28)
 - support formula 
 - support NaiveDate & NaiveDateTime
