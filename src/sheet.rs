@@ -21,6 +21,19 @@ macro_rules! blank {
     }};
 }
 
+pub struct AutoFilter {
+    pub start_col: String,
+    pub end_col: String,
+    pub start_row: usize,
+    pub end_row: usize
+}
+
+impl ToString for AutoFilter {
+    fn to_string(&self) -> String {
+        format!("{}{}:{}{}", self.start_col, self.start_row, self.end_col, self.end_row)
+    }
+}
+
 #[derive(Default)]
 pub struct Sheet {
     pub id: usize,
@@ -29,6 +42,7 @@ pub struct Sheet {
     max_row_index: usize,
     pub calc_chain: Vec<String>,
     pub merged_cells: Vec<MergedCell>,
+    pub auto_filter: Option<AutoFilter>
 }
 
 #[derive(Default)]
@@ -347,6 +361,18 @@ impl Sheet {
         }
     }
 
+    /// Adds the "AutoFilter" feature to the specified range of columns and rows (1-indexed).
+    /// The arguments are used to construct the range of columns and rows used by the "AutoFilter"
+    /// feature. For example: Column 1, Row 1 to Column 2, Row 2 will create the range "A1:B2".
+    /// If invalid parameters are provided, the "AutoFilter" is not created.
+    pub fn add_auto_filter(&mut self, start_col: usize, end_col: usize, start_row: usize, end_row: usize) {
+        if start_col > 0 && start_row > 0 && start_col <= end_col && start_row <= end_row {
+            self.auto_filter = Some(AutoFilter{ start_col: column_letter(start_col),
+                                                end_col: column_letter(end_col),
+                                                start_row, end_row });
+        }
+    }
+
     pub fn add_column(&mut self, column: Column) {
         self.columns.push(column)
     }
@@ -413,7 +439,11 @@ impl Sheet {
     }
 
     fn write_data_end(&self, writer: &mut dyn Write) -> Result<()> {
-        writer.write_all(b"\n</sheetData>\n")
+        if let Some(auto_filter) = &self.auto_filter {
+            writer.write_all(format!("\n</sheetData>\n<autoFilter ref=\"{}\"/>\n", auto_filter.to_string()).as_bytes())
+        } else {
+            writer.write_all(b"\n</sheetData>\n")
+        }
     }
 
     fn close(&self, writer: &mut dyn Write) -> Result<()> {
