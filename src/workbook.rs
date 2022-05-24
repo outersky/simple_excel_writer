@@ -1,8 +1,9 @@
 use std::{borrow::Borrow, fs::File};
 use std::io::*;
 use std::path::*;
+use std::collections::HashMap;
 
-use super::{Sheet, SheetWriter};
+use super::{escape_xml, Sheet, SheetWriter};
 
 struct ArchiveFile {
     name: PathBuf,
@@ -34,6 +35,43 @@ pub struct Workbook {
     sheets: Vec<SheetRef>,
     calc_chain: Vec<(String, usize)>,
     saved: bool,
+    cell_formats: CellFormats
+}
+
+#[derive(Default)]
+pub struct CellFormats {
+    pub base_cust_id: u16,
+    pub num_formats: HashMap<u16,String>,
+    pub xf_formats: Vec<CellFormat>
+}
+
+impl CellFormats {
+    pub fn new() -> CellFormats {
+        let base_cust_id = 165;
+        // Default cell formats
+        let mut fmts = vec![];
+        fmts.push(CellFormat {id: 0, font_id: 0, fill_id: 0, border_id: 0, xf_id: 0, apply_num_fmt: 1});
+        fmts.push(CellFormat {id: 14, font_id: 0, fill_id: 0, border_id: 0, xf_id: 0, apply_num_fmt: 1});
+        fmts.push(CellFormat {id: 22, font_id: 0, fill_id: 0, border_id: 0, xf_id: 0, apply_num_fmt: 1});
+        CellFormats {base_cust_id, num_formats: HashMap::new(), xf_formats: fmts}
+    }
+
+    pub fn add_number_format(&mut self, pattern: String) -> u16 {
+        let new_id = self.base_cust_id + self.num_formats.len() as u16;
+        self.num_formats.insert(new_id, pattern);
+        let result = self.xf_formats.len() as u16;
+        self.xf_formats.push(CellFormat{id: new_id, font_id: 0, fill_id: 0, border_id:  0, xf_id: 0, apply_num_fmt: 1});
+        result
+    }
+}
+
+pub struct CellFormat {
+    pub id: u16,
+    pub font_id: u16,
+    pub fill_id: u16,
+    pub border_id: u16,
+    pub xf_id: u16,
+    pub apply_num_fmt: u16
 }
 
 #[derive(Default, Clone)]
@@ -95,6 +133,7 @@ impl Workbook {
             sheets: Vec::new(),
             calc_chain: Vec::new(),
             saved: false,
+            cell_formats: CellFormats::new()
         }
     }
     /// Creates a workbook not using shared strings
@@ -107,6 +146,7 @@ impl Workbook {
             sheets: Vec::new(),
             calc_chain: Vec::new(),
             saved: false,
+            cell_formats: CellFormats::new()
         }
     }
 
@@ -119,6 +159,7 @@ impl Workbook {
             sheets: Vec::new(),
             calc_chain: Vec::new(),
             saved: false,
+            cell_formats: CellFormats::new()
         }
     }
 
@@ -167,6 +208,10 @@ impl Workbook {
         } else {
             Ok(Some(buf))
         }
+    }
+
+    pub fn add_number_format(&mut self, format_str: String) -> u16 {
+        self.cell_formats.add_number_format(format_str)
     }
 
     fn create_files(&mut self) -> Result<()> {
@@ -218,7 +263,7 @@ impl Workbook {
         root.push("xl");
         root.push("styles.xml");
         let mut writer = Vec::new();
-        Self::create_styles(&mut writer)?;
+        self.create_styles(&mut writer)?;
         self.archive_files.push(ArchiveFile {
             name: root.clone(),
             data: writer,
@@ -421,11 +466,25 @@ impl Workbook {
         writer.write_all(xml)
     }
 
-    fn create_styles(writer: &mut dyn Write) -> Result<()> {
+    fn create_styles(&self, writer: &mut dyn Write) -> Result<()> {
         let xml = br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
             xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
-    <fonts count="1">
+"#;
+        writer.write_all(xml)?;
+        if self.cell_formats.num_formats.len() > 0 {
+            let num_fmts = format!("    <numFmts count=\"{}\">", self.cell_formats.num_formats.len());
+            writer.write_all(num_fmts.as_bytes())?;
+            for format in &self.cell_formats.xf_formats {
+                if let Some(value) = self.cell_formats.num_formats.get(&format.id) {
+                    let fmt = format!("\n        <numFmt numFmtId=\"{}\" formatCode=\"{}\"/>", format.id, escape_xml(value));
+                    writer.write_all(fmt.as_bytes())?;
+                }
+            }
+            let fmt_tail = "\n    </numFmts>\n".as_bytes();
+            writer.write_all(fmt_tail)?;
+        }
+        let mid = br#"    <fonts count="1">
         <font>
             <sz val="12"/>
             <color theme="1"/>
@@ -453,20 +512,25 @@ impl Workbook {
     </borders>
     <cellStyleXfs count="1">
         <xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>
-    </cellStyleXfs>
-    <cellXfs count="2">
-        <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
-        <xf numFmtId="14" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
-        <xf numFmtId="22" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
-    </cellXfs>
-    <cellStyles count="1">
+    </cellStyleXfs>"#;
+        writer.write_all(mid)?;
+        if self.cell_formats.xf_formats.len() > 0 {
+            let cell_fmts = format!("\n    <cellXfs count=\"{}\">", self.cell_formats.xf_formats.len());
+            writer.write_all(cell_fmts.as_bytes())?;
+            for fmt in &self.cell_formats.xf_formats {
+                let xf_entry = format!("\n        <xf numFmtId=\"{}\" fontId=\"{}\" fillId=\"{}\" borderId=\"{}\" xfId=\"{}\" applyNumberFormat=\"{}\"/>", fmt.id, fmt.font_id, fmt.fill_id, fmt.border_id, fmt.xf_id, fmt.apply_num_fmt);
+                writer.write_all(xf_entry.as_bytes())?;
+            }
+            let cell_fmts_end = "\n    </cellXfs>\n".as_bytes();
+            writer.write_all(cell_fmts_end)?;
+        }
+        let tail = br#"    <cellStyles count="1">
         <cellStyle name="Normal" xfId="0" builtinId="0"/>
     </cellStyles>
     <dxfs count="0"/>
     <tableStyles count="0" defaultTableStyle="TableStyleMedium9" defaultPivotStyle="PivotStyleMedium4"/>
-</styleSheet>
-        "#;
-        writer.write_all(xml)
+</styleSheet>"#;
+        writer.write_all(tail)
     }
 
     fn create_workbook(&mut self, writer: &mut dyn Write) -> Result<()> {
