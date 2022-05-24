@@ -55,7 +55,7 @@ pub struct Row {
 
 pub struct Cell {
     pub column_index: usize,
-    pub value: CellValue
+    pub value: CellValue,
 }
 
 pub struct MergedCell {
