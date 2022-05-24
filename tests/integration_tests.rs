@@ -65,9 +65,9 @@ fn creates_and_saves_an_excel_sheet_driver(filename: Option<&str>) -> Option<Vec
 
 fn get_file_as_str_from_zip(mem_file: &Vec<u8>, file_name: &str) -> String {
     let mut archive = zip::read::ZipArchive::new(Cursor::new(mem_file)).unwrap();
-    let mut styles_file = archive.by_name(file_name).unwrap();
+    let mut zip_file = archive.by_name(file_name).unwrap();
     let mut temp_buf = vec![];
-    let _ = styles_file.read_to_end(&mut temp_buf).unwrap();
+    let _ = zip_file.read_to_end(&mut temp_buf).unwrap();
     std::str::from_utf8(&temp_buf[..]).unwrap().to_string()
 }
 
