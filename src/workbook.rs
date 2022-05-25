@@ -517,14 +517,14 @@ impl Workbook {
     </cellStyleXfs>"#;
         writer.write_all(mid)?;
         if self.cell_formats.cell_xfs.len() > 0 {
-            let cell_fmts = format!("\n    <cellXfs count=\"{}\">", self.cell_formats.cell_xfs.len());
-            writer.write_all(cell_fmts.as_bytes())?;
-            for fmt in &self.cell_formats.cell_xfs {
-                let xf_entry = format!("\n        <xf numFmtId=\"{}\" fontId=\"{}\" fillId=\"{}\" borderId=\"{}\" xfId=\"{}\" applyNumberFormat=\"{}\"/>", fmt.num_fmt_id, fmt.font_id, fmt.fill_id, fmt.border_id, fmt.xf_id, fmt.apply_num_fmt);
+            let cell_xfs_start = format!("\n    <cellXfs count=\"{}\">", self.cell_formats.cell_xfs.len());
+            writer.write_all(cell_xfs_start.as_bytes())?;
+            for xf in &self.cell_formats.cell_xfs {
+                let xf_entry = format!("\n        <xf numFmtId=\"{}\" fontId=\"{}\" fillId=\"{}\" borderId=\"{}\" xfId=\"{}\" applyNumberFormat=\"{}\"/>", xf.num_fmt_id, xf.font_id, xf.fill_id, xf.border_id, xf.xf_id, xf.apply_num_fmt);
                 writer.write_all(xf_entry.as_bytes())?;
             }
-            let cell_fmts_end = "\n    </cellXfs>\n".as_bytes();
-            writer.write_all(cell_fmts_end)?;
+            let cell_xfs_end = "\n    </cellXfs>\n".as_bytes();
+            writer.write_all(cell_xfs_end)?;
         }
         let tail = br#"    <cellStyles count="1">
         <cellStyle name="Normal" xfId="0" builtinId="0"/>
