@@ -198,7 +198,7 @@ fn creates_file_with_custom_number_format_and_checks_style() {
     ws.add_column(Column { width: 20.0 });
     wb.write_sheet(&mut ws, |sw| {
         sw.append_row(row!["Cost", "Weight", "Symbol"]).expect("Should append header!");
-        sw.append_row(row![(20.1, Some(dollar_idx)), (50.12,  Some(weight_idx)), (700.0,  Some(diamond_idx))])
+        sw.append_row(row![(20.1, dollar_idx), (50.12, weight_idx), (700.0, diamond_idx)])
     })
     .expect("Write excel error!");
 
