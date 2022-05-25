@@ -236,7 +236,4 @@ fn chrono_check_default_style () {
     let expected_datetime_format_idx = 2;
     assert!(sheet1.contains(format!("<c r=\"A2\" s=\"{}\"><v>41223</v></c>", expected_date_format_idx).as_str()), "Date contains correct reference to date format");
     assert!(sheet1.contains(format!("<c r=\"B2\" s=\"{}\"><v>41890.88384259259</v></c>", expected_datetime_format_idx).as_str()), "Date contains correct reference to date format");
-    use std::io::Write;
-    let mut f = std::fs::File::create("test4.xlsx").expect("no issues creating file");
-    let _ = f.write_all(&mem_file);
 }
