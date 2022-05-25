@@ -70,7 +70,8 @@ pub struct Column {
 #[derive(Clone)]
 pub enum CellValue {
     Bool(bool),
-    Number((f64, Option<u16>)),
+    Number(f64),
+    NumberFormatted((f64, Option<u16>)),
     #[cfg(feature = "chrono")]
     Date(f64),
     #[cfg(feature = "chrono")]
@@ -102,13 +103,13 @@ impl ToCellValue for bool {
 
 impl ToCellValue for (f64, Option<u16>) {
     fn to_cell_value(&self) -> CellValue {
-        CellValue::Number(self.to_owned())
+        CellValue::NumberFormatted(self.to_owned())
     }
 }
 
 impl ToCellValue for f64 {
     fn to_cell_value(&self) -> CellValue {
-        CellValue::Number((self.to_owned(), None))
+        CellValue::Number(self.to_owned())
     }
 }
 
@@ -257,7 +258,8 @@ fn write_value(cv: &CellValue, ref_id: String, writer: &mut dyn Write) -> Result
             let s = format!("<c r=\"{}\" t=\"b\"><v>{}</v></c>", ref_id, v);
             writer.write_all(s.as_bytes())?;
         }
-        &CellValue::Number(num) => write_number(&ref_id, num.0, num.1, writer)?,
+        &CellValue::Number(num) => write_number(&ref_id, num, None, writer)?,
+        &CellValue::NumberFormatted(num) => write_number(&ref_id, num.0, num.1, writer)?,
         #[cfg(feature = "chrono")]
         &CellValue::Date(num) => write_number(&ref_id, num, Some(1), writer)?,
         #[cfg(feature = "chrono")]
