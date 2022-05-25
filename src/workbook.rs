@@ -39,8 +39,8 @@ pub struct Workbook {
 }
 
 #[derive(Default)]
-pub struct CellFormats {
-    pub base_cust_id: u16,
+struct CellFormats {
+    base_cust_id: u16,
     pub num_formats: HashMap<u16,String>,
     pub xf_formats: Vec<CellFormat>
 }
@@ -48,25 +48,26 @@ pub struct CellFormats {
 impl CellFormats {
     pub fn new() -> CellFormats {
         let base_cust_id = 165;
-        // Default cell formats
         let mut fmts = vec![];
-        fmts.push(CellFormat {id: 0, font_id: 0, fill_id: 0, border_id: 0, xf_id: 0, apply_num_fmt: 1});
-        fmts.push(CellFormat {id: 14, font_id: 0, fill_id: 0, border_id: 0, xf_id: 0, apply_num_fmt: 1});
-        fmts.push(CellFormat {id: 22, font_id: 0, fill_id: 0, border_id: 0, xf_id: 0, apply_num_fmt: 1});
+        // Default cell formats
+        fmts.push(CellFormat {num_fmt_id: 0, font_id: 0, fill_id: 0, border_id: 0, xf_id: 0, apply_num_fmt: 1});
+        fmts.push(CellFormat {num_fmt_id: 14, font_id: 0, fill_id: 0, border_id: 0, xf_id: 0, apply_num_fmt: 1});
+        fmts.push(CellFormat {num_fmt_id: 22, font_id: 0, fill_id: 0, border_id: 0, xf_id: 0, apply_num_fmt: 1});
         CellFormats {base_cust_id, num_formats: HashMap::new(), xf_formats: fmts}
     }
 
-    pub fn add_number_format(&mut self, pattern: String) -> u16 {
+    pub fn add_cust_number_format(&mut self, pattern: String) -> u16 {
         let new_id = self.base_cust_id + self.num_formats.len() as u16;
         self.num_formats.insert(new_id, pattern);
         let result = self.xf_formats.len() as u16;
-        self.xf_formats.push(CellFormat{id: new_id, font_id: 0, fill_id: 0, border_id:  0, xf_id: 0, apply_num_fmt: 1});
+        self.xf_formats.push(CellFormat{num_fmt_id: new_id, font_id: 0, fill_id: 0, border_id:  0, xf_id: 0, apply_num_fmt: 1});
         result
     }
 }
 
-pub struct CellFormat {
-    pub id: u16,
+#[derive(Default, Clone)]
+struct CellFormat {
+    pub num_fmt_id: u16,
     pub font_id: u16,
     pub fill_id: u16,
     pub border_id: u16,
@@ -210,8 +211,8 @@ impl Workbook {
         }
     }
 
-    pub fn add_number_format(&mut self, format_str: String) -> u16 {
-        self.cell_formats.add_number_format(format_str)
+    pub fn add_cust_number_format(&mut self, format_str: String) -> u16 {
+        self.cell_formats.add_cust_number_format(format_str)
     }
 
     fn create_files(&mut self) -> Result<()> {
@@ -476,8 +477,8 @@ impl Workbook {
             let num_fmts = format!("    <numFmts count=\"{}\">", self.cell_formats.num_formats.len());
             writer.write_all(num_fmts.as_bytes())?;
             for format in &self.cell_formats.xf_formats {
-                if let Some(value) = self.cell_formats.num_formats.get(&format.id) {
-                    let fmt = format!("\n        <numFmt numFmtId=\"{}\" formatCode=\"{}\"/>", format.id, escape_xml(value));
+                if let Some(value) = self.cell_formats.num_formats.get(&format.num_fmt_id) {
+                    let fmt = format!("\n        <numFmt numFmtId=\"{}\" formatCode=\"{}\"/>", format.num_fmt_id, escape_xml(value));
                     writer.write_all(fmt.as_bytes())?;
                 }
             }
@@ -518,7 +519,7 @@ impl Workbook {
             let cell_fmts = format!("\n    <cellXfs count=\"{}\">", self.cell_formats.xf_formats.len());
             writer.write_all(cell_fmts.as_bytes())?;
             for fmt in &self.cell_formats.xf_formats {
-                let xf_entry = format!("\n        <xf numFmtId=\"{}\" fontId=\"{}\" fillId=\"{}\" borderId=\"{}\" xfId=\"{}\" applyNumberFormat=\"{}\"/>", fmt.id, fmt.font_id, fmt.fill_id, fmt.border_id, fmt.xf_id, fmt.apply_num_fmt);
+                let xf_entry = format!("\n        <xf numFmtId=\"{}\" fontId=\"{}\" fillId=\"{}\" borderId=\"{}\" xfId=\"{}\" applyNumberFormat=\"{}\"/>", fmt.num_fmt_id, fmt.font_id, fmt.fill_id, fmt.border_id, fmt.xf_id, fmt.apply_num_fmt);
                 writer.write_all(xf_entry.as_bytes())?;
             }
             let cell_fmts_end = "\n    </cellXfs>\n".as_bytes();

@@ -184,9 +184,13 @@ fn creates_file_with_custom_number_format_and_checks_style() {
     <tableStyles count="0" defaultTableStyle="TableStyleMedium9" defaultPivotStyle="PivotStyleMedium4"/>
 </styleSheet>"##.to_string();
     let mut wb = excel::Workbook::create_in_memory();
-    let dollar_id = wb.add_number_format("\"$\"#,##0.00".to_string());
-    let weight_id = wb.add_number_format("#,##0.00\" KG\"".to_string());
-    let diamond_id = wb.add_number_format("#,##0.0\"<>\"".to_string());
+    let dollar_id = wb.add_cust_number_format("\"$\"#,##0.00".to_string());
+    let weight_id = wb.add_cust_number_format("#,##0.00\" KG\"".to_string());
+    let diamond_id = wb.add_cust_number_format("#,##0.0\"<>\"".to_string());
+
+    assert_eq!(dollar_id, 3);
+    assert_eq!(weight_id, 4);
+    assert_eq!(diamond_id, 5);
 
     let mut ws = wb.create_sheet("test_sheet");
     ws.add_column(Column { width: 20.0 });
@@ -203,7 +207,7 @@ fn creates_file_with_custom_number_format_and_checks_style() {
     assert_eq!(expected_xml, result, "The style sheet should match!");
 
     let sheet = get_file_as_str_from_zip(&mem_file, "xl/worksheets/sheet1.xml");
-    assert!(sheet.contains("<c r=\"A2\" s=\"3\"><v>20.1</v></c>"), "First cell should reference the 3rd index of the cellXfs list");
-    assert!(sheet.contains("<c r=\"B2\" s=\"4\"><v>50.12</v></c>"), "First cell should reference the 4th index of the cellXfs list");
-    assert!(sheet.contains("<c r=\"C2\" s=\"5\"><v>700</v></c>"), "First cell should reference the 5th (last) index of the cellXfs list");
+    assert!(sheet.contains(format!("<c r=\"A2\" s=\"{}\"><v>20.1</v></c>", dollar_id).as_str()), "First cell should reference the 3rd index of the cellXfs list");
+    assert!(sheet.contains(format!("<c r=\"B2\" s=\"{}\"><v>50.12</v></c>", weight_id).as_str()), "First cell should reference the 4th index of the cellXfs list");
+    assert!(sheet.contains(format!("<c r=\"C2\" s=\"{}\"><v>700</v></c>", diamond_id).as_str()), "First cell should reference the 5th (last) index of the cellXfs list");
 }
