@@ -476,11 +476,12 @@ impl Workbook {
         if self.cell_formats.num_fmts.len() > 0 {
             let num_fmts = format!("    <numFmts count=\"{}\">", self.cell_formats.num_fmts.len());
             writer.write_all(num_fmts.as_bytes())?;
-            for format in &self.cell_formats.cell_xfs {
-                if let Some(value) = self.cell_formats.num_fmts.get(&format.num_fmt_id) {
-                    let fmt = format!("\n        <numFmt numFmtId=\"{}\" formatCode=\"{}\"/>", format.num_fmt_id, escape_xml(value));
-                    writer.write_all(fmt.as_bytes())?;
-                }
+            // Sort the map for consistent XML format
+            let mut fmts_sorted: Vec<(&u16, &String)> = self.cell_formats.num_fmts.iter().collect();
+            fmts_sorted.sort_by_key(|item| item.0);
+            for (fmt_id, value) in fmts_sorted {
+                let fmt = format!("\n        <numFmt numFmtId=\"{}\" formatCode=\"{}\"/>", fmt_id, escape_xml(value));
+                writer.write_all(fmt.as_bytes())?;
             }
             let fmt_tail = "\n    </numFmts>\n".as_bytes();
             writer.write_all(fmt_tail)?;
