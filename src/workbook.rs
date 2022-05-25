@@ -41,8 +41,8 @@ pub struct Workbook {
 #[derive(Default)]
 struct CellFormats {
     base_cust_id: u16,
-    pub num_formats: HashMap<u16,String>,
-    pub xf_formats: Vec<CellFormat>
+    pub num_fmts: HashMap<u16,String>,
+    pub cell_xfs: Vec<CellXf>
 }
 
 impl CellFormats {
@@ -50,23 +50,23 @@ impl CellFormats {
         let base_cust_id = 165;
         let mut fmts = vec![];
         // Default cell formats
-        fmts.push(CellFormat {num_fmt_id: 0, font_id: 0, fill_id: 0, border_id: 0, xf_id: 0, apply_num_fmt: 1});
-        fmts.push(CellFormat {num_fmt_id: 14, font_id: 0, fill_id: 0, border_id: 0, xf_id: 0, apply_num_fmt: 1});
-        fmts.push(CellFormat {num_fmt_id: 22, font_id: 0, fill_id: 0, border_id: 0, xf_id: 0, apply_num_fmt: 1});
-        CellFormats {base_cust_id, num_formats: HashMap::new(), xf_formats: fmts}
+        fmts.push(CellXf {num_fmt_id: 0, font_id: 0, fill_id: 0, border_id: 0, xf_id: 0, apply_num_fmt: 1});
+        fmts.push(CellXf {num_fmt_id: 14, font_id: 0, fill_id: 0, border_id: 0, xf_id: 0, apply_num_fmt: 1});
+        fmts.push(CellXf {num_fmt_id: 22, font_id: 0, fill_id: 0, border_id: 0, xf_id: 0, apply_num_fmt: 1});
+        CellFormats {base_cust_id, num_fmts: HashMap::new(), cell_xfs: fmts}
     }
 
     pub fn add_cust_number_format(&mut self, pattern: String) -> u16 {
-        let new_id = self.base_cust_id + self.num_formats.len() as u16;
-        self.num_formats.insert(new_id, pattern);
-        let result = self.xf_formats.len() as u16;
-        self.xf_formats.push(CellFormat{num_fmt_id: new_id, font_id: 0, fill_id: 0, border_id:  0, xf_id: 0, apply_num_fmt: 1});
+        let new_id = self.base_cust_id + self.num_fmts.len() as u16;
+        self.num_fmts.insert(new_id, pattern);
+        let result = self.cell_xfs.len() as u16;
+        self.cell_xfs.push(CellXf{num_fmt_id: new_id, font_id: 0, fill_id: 0, border_id:  0, xf_id: 0, apply_num_fmt: 1});
         result
     }
 }
 
 #[derive(Default, Clone)]
-struct CellFormat {
+struct CellXf {
     pub num_fmt_id: u16,
     pub font_id: u16,
     pub fill_id: u16,
@@ -473,11 +473,11 @@ impl Workbook {
             xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
 "#;
         writer.write_all(xml)?;
-        if self.cell_formats.num_formats.len() > 0 {
-            let num_fmts = format!("    <numFmts count=\"{}\">", self.cell_formats.num_formats.len());
+        if self.cell_formats.num_fmts.len() > 0 {
+            let num_fmts = format!("    <numFmts count=\"{}\">", self.cell_formats.num_fmts.len());
             writer.write_all(num_fmts.as_bytes())?;
-            for format in &self.cell_formats.xf_formats {
-                if let Some(value) = self.cell_formats.num_formats.get(&format.num_fmt_id) {
+            for format in &self.cell_formats.cell_xfs {
+                if let Some(value) = self.cell_formats.num_fmts.get(&format.num_fmt_id) {
                     let fmt = format!("\n        <numFmt numFmtId=\"{}\" formatCode=\"{}\"/>", format.num_fmt_id, escape_xml(value));
                     writer.write_all(fmt.as_bytes())?;
                 }
@@ -515,10 +515,10 @@ impl Workbook {
         <xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>
     </cellStyleXfs>"#;
         writer.write_all(mid)?;
-        if self.cell_formats.xf_formats.len() > 0 {
-            let cell_fmts = format!("\n    <cellXfs count=\"{}\">", self.cell_formats.xf_formats.len());
+        if self.cell_formats.cell_xfs.len() > 0 {
+            let cell_fmts = format!("\n    <cellXfs count=\"{}\">", self.cell_formats.cell_xfs.len());
             writer.write_all(cell_fmts.as_bytes())?;
-            for fmt in &self.cell_formats.xf_formats {
+            for fmt in &self.cell_formats.cell_xfs {
                 let xf_entry = format!("\n        <xf numFmtId=\"{}\" fontId=\"{}\" fillId=\"{}\" borderId=\"{}\" xfId=\"{}\" applyNumberFormat=\"{}\"/>", fmt.num_fmt_id, fmt.font_id, fmt.fill_id, fmt.border_id, fmt.xf_id, fmt.apply_num_fmt);
                 writer.write_all(xf_entry.as_bytes())?;
             }
