@@ -80,9 +80,7 @@ fn creates_and_saves_an_excel_sheet() {
     assert!(in_memory_test.is_some());
 }
 
-#[test]
-fn creates_file_and_checks_default_style() {
-    let expected_xml = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+const DEFAULT_STYLE_XML: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
             xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
     <fonts count="1">
@@ -124,10 +122,13 @@ fn creates_file_and_checks_default_style() {
     </cellStyles>
     <dxfs count="0"/>
     <tableStyles count="0" defaultTableStyle="TableStyleMedium9" defaultPivotStyle="PivotStyleMedium4"/>
-</styleSheet>"#.to_string();
+</styleSheet>"#;
+
+#[test]
+fn creates_file_and_checks_default_style() {
     let mem_file = creates_and_saves_an_excel_sheet_driver(None).unwrap();
     let result = get_file_as_str_from_zip(&mem_file, "xl/styles.xml");
-    assert_eq!(expected_xml, result, "The style sheet should match!");
+    assert_eq!(DEFAULT_STYLE_XML.to_string(), result, "The style sheet should match!");
 }
 
 #[test]
@@ -206,8 +207,36 @@ fn creates_file_with_custom_number_format_and_checks_style() {
     let result = get_file_as_str_from_zip(&mem_file, "xl/styles.xml");
     assert_eq!(expected_xml, result, "The style sheet should match!");
 
-    let sheet = get_file_as_str_from_zip(&mem_file, "xl/worksheets/sheet1.xml");
-    assert!(sheet.contains(format!("<c r=\"A2\" s=\"{}\"><v>20.1</v></c>", dollar_idx).as_str()), "First cell should reference the 3rd index of the cellXfs list");
-    assert!(sheet.contains(format!("<c r=\"B2\" s=\"{}\"><v>50.12</v></c>", weight_idx).as_str()), "First cell should reference the 4th index of the cellXfs list");
-    assert!(sheet.contains(format!("<c r=\"C2\" s=\"{}\"><v>700</v></c>", diamond_idx).as_str()), "First cell should reference the 5th (last) index of the cellXfs list");
+    let sheet1 = get_file_as_str_from_zip(&mem_file, "xl/worksheets/sheet1.xml");
+    assert!(sheet1.contains(format!("<c r=\"A2\" s=\"{}\"><v>20.1</v></c>", dollar_idx).as_str()), "First cell should reference the 3rd index of the cellXfs list");
+    assert!(sheet1.contains(format!("<c r=\"B2\" s=\"{}\"><v>50.12</v></c>", weight_idx).as_str()), "First cell should reference the 4th index of the cellXfs list");
+    assert!(sheet1.contains(format!("<c r=\"C2\" s=\"{}\"><v>700</v></c>", diamond_idx).as_str()), "First cell should reference the 5th (last) index of the cellXfs list");
+}
+
+#[cfg(feature = "chrono")]
+#[test]
+fn chrono_check_default_style () {
+    let mut wb = excel::Workbook::create_in_memory();
+    let mut ws = wb.create_sheet("test_sheet");
+    ws.add_column(Column { width: 20.0 });
+    ws.add_column(Column { width: 20.0 });
+    ws.add_column(Column { width: 20.0 });
+    wb.write_sheet(&mut ws, |sw| {
+        sw.append_row(row!["Date", "Datetime"]).expect("Should append header!");
+        sw.append_row(row![chrono::NaiveDate::from_ymd(2012, 11, 10), chrono::NaiveDate::from_ymd(2014, 9, 8).and_hms(21, 12, 44)])
+    })
+    .expect("Write excel error!");
+
+    let mem_file = wb.close().expect("No error on workbook close!").expect("Should have file in memory!");
+    let result = get_file_as_str_from_zip(&mem_file, "xl/styles.xml");
+    assert_eq!(DEFAULT_STYLE_XML.to_string(), result, "The style sheet should match!");
+
+    let sheet1 = get_file_as_str_from_zip(&mem_file, "xl/worksheets/sheet1.xml");
+    let expected_date_format_idx = 1;
+    let expected_datetime_format_idx = 2;
+    assert!(sheet1.contains(format!("<c r=\"A2\" s=\"{}\"><v>41223</v></c>", expected_date_format_idx).as_str()), "Date contains correct reference to date format");
+    assert!(sheet1.contains(format!("<c r=\"B2\" s=\"{}\"><v>41890.88384259259</v></c>", expected_datetime_format_idx).as_str()), "Date contains correct reference to date format");
+    use std::io::Write;
+    let mut f = std::fs::File::create("test4.xlsx").expect("no issues creating file");
+    let _ = f.write_all(&mem_file);
 }
