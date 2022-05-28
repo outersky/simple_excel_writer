@@ -1,5 +1,5 @@
 extern crate simple_excel_writer;
-
+use std::io::{Cursor, Read};
 use excel::*;
 use simple_excel_writer as excel;
 
@@ -63,6 +63,14 @@ fn creates_and_saves_an_excel_sheet_driver(filename: Option<&str>) -> Option<Vec
     wb.close().expect("Close excel error!")
 }
 
+fn get_file_as_str_from_zip(mem_file: &Vec<u8>, file_name: &str) -> String {
+    let mut archive = zip::read::ZipArchive::new(Cursor::new(mem_file)).unwrap();
+    let mut zip_file = archive.by_name(file_name).unwrap();
+    let mut temp_buf = vec![];
+    let _ = zip_file.read_to_end(&mut temp_buf).unwrap();
+    std::str::from_utf8(&temp_buf[..]).unwrap().to_string()
+}
+
 #[test]
 fn creates_and_saves_an_excel_sheet() {
     let file_test = creates_and_saves_an_excel_sheet_driver(Some("test.xlsx"));
@@ -70,4 +78,162 @@ fn creates_and_saves_an_excel_sheet() {
 
     let in_memory_test = creates_and_saves_an_excel_sheet_driver(None);
     assert!(in_memory_test.is_some());
+}
+
+const DEFAULT_STYLE_XML: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+            xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
+    <fonts count="1">
+        <font>
+            <sz val="12"/>
+            <color theme="1"/>
+            <name val="Calibri"/>
+            <family val="2"/>
+            <scheme val="minor"/>
+        </font>
+    </fonts>
+    <fills count="2">
+        <fill>
+            <patternFill patternType="none"/>
+        </fill>
+        <fill>
+            <patternFill patternType="gray125"/>
+        </fill>
+    </fills>
+    <borders count="1">
+        <border>
+            <left/>
+            <right/>
+            <top/>
+            <bottom/>
+            <diagonal/>
+        </border>
+    </borders>
+    <cellStyleXfs count="1">
+        <xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>
+    </cellStyleXfs>
+    <cellXfs count="3">
+        <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
+        <xf numFmtId="14" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
+        <xf numFmtId="22" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
+    </cellXfs>
+    <cellStyles count="1">
+        <cellStyle name="Normal" xfId="0" builtinId="0"/>
+    </cellStyles>
+    <dxfs count="0"/>
+    <tableStyles count="0" defaultTableStyle="TableStyleMedium9" defaultPivotStyle="PivotStyleMedium4"/>
+</styleSheet>"#;
+
+#[test]
+fn creates_file_and_checks_default_style() {
+    let mem_file = creates_and_saves_an_excel_sheet_driver(None).unwrap();
+    let result = get_file_as_str_from_zip(&mem_file, "xl/styles.xml");
+    assert_eq!(DEFAULT_STYLE_XML.to_string(), result, "The style sheet should match!");
+}
+
+#[test]
+fn creates_file_with_custom_number_format_and_checks_style() {
+    let expected_xml = r##"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+            xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
+    <numFmts count="3">
+        <numFmt numFmtId="165" formatCode="&quot;$&quot;#,##0.00"/>
+        <numFmt numFmtId="166" formatCode="#,##0.00&quot; KG&quot;"/>
+        <numFmt numFmtId="167" formatCode="#,##0.0&quot;&lt;&gt;&quot;"/>
+    </numFmts>
+    <fonts count="1">
+        <font>
+            <sz val="12"/>
+            <color theme="1"/>
+            <name val="Calibri"/>
+            <family val="2"/>
+            <scheme val="minor"/>
+        </font>
+    </fonts>
+    <fills count="2">
+        <fill>
+            <patternFill patternType="none"/>
+        </fill>
+        <fill>
+            <patternFill patternType="gray125"/>
+        </fill>
+    </fills>
+    <borders count="1">
+        <border>
+            <left/>
+            <right/>
+            <top/>
+            <bottom/>
+            <diagonal/>
+        </border>
+    </borders>
+    <cellStyleXfs count="1">
+        <xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>
+    </cellStyleXfs>
+    <cellXfs count="6">
+        <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
+        <xf numFmtId="14" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
+        <xf numFmtId="22" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
+        <xf numFmtId="165" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
+        <xf numFmtId="166" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
+        <xf numFmtId="167" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
+    </cellXfs>
+    <cellStyles count="1">
+        <cellStyle name="Normal" xfId="0" builtinId="0"/>
+    </cellStyles>
+    <dxfs count="0"/>
+    <tableStyles count="0" defaultTableStyle="TableStyleMedium9" defaultPivotStyle="PivotStyleMedium4"/>
+</styleSheet>"##.to_string();
+    let mut wb = excel::Workbook::create_in_memory();
+    let dollar_idx = wb.add_cust_number_format("\"$\"#,##0.00".to_string());
+    let weight_idx = wb.add_cust_number_format("#,##0.00\" KG\"".to_string());
+    let diamond_idx = wb.add_cust_number_format("#,##0.0\"<>\"".to_string());
+
+    assert_eq!(dollar_idx, 3);
+    assert_eq!(weight_idx, 4);
+    assert_eq!(diamond_idx, 5);
+
+    let mut ws = wb.create_sheet("test_sheet");
+    ws.add_column(Column { width: 20.0 });
+    ws.add_column(Column { width: 20.0 });
+    ws.add_column(Column { width: 20.0 });
+    wb.write_sheet(&mut ws, |sw| {
+        sw.append_row(row!["Cost", "Weight", "Symbol"]).expect("Should append header!");
+        sw.append_row(row![(20.1, dollar_idx), (50.12, weight_idx), (700.0, diamond_idx)])
+    })
+    .expect("Write excel error!");
+
+    let mem_file = wb.close().expect("No error on workbook close!").expect("Should have file in memory!");
+    let result = get_file_as_str_from_zip(&mem_file, "xl/styles.xml");
+    assert_eq!(expected_xml, result, "The style sheet should match!");
+
+    let sheet1 = get_file_as_str_from_zip(&mem_file, "xl/worksheets/sheet1.xml");
+    assert!(sheet1.contains(format!("<c r=\"A2\" s=\"{}\"><v>20.1</v></c>", dollar_idx).as_str()), "First cell should reference the 3rd index of the cellXfs list");
+    assert!(sheet1.contains(format!("<c r=\"B2\" s=\"{}\"><v>50.12</v></c>", weight_idx).as_str()), "First cell should reference the 4th index of the cellXfs list");
+    assert!(sheet1.contains(format!("<c r=\"C2\" s=\"{}\"><v>700</v></c>", diamond_idx).as_str()), "First cell should reference the 5th (last) index of the cellXfs list");
+}
+
+#[cfg(feature = "chrono")]
+#[test]
+fn chrono_check_default_style () {
+    let mut wb = excel::Workbook::create_in_memory();
+    let mut ws = wb.create_sheet("test_sheet");
+    ws.add_column(Column { width: 20.0 });
+    ws.add_column(Column { width: 20.0 });
+    ws.add_column(Column { width: 20.0 });
+    wb.write_sheet(&mut ws, |sw| {
+        sw.append_row(row!["Date", "Datetime"]).expect("Should append header!");
+        sw.append_row(row![chrono::NaiveDate::from_ymd(2012, 11, 10), chrono::NaiveDate::from_ymd(2014, 9, 8).and_hms(21, 12, 44)])
+    })
+    .expect("Write excel error!");
+
+    let mem_file = wb.close().expect("No error on workbook close!").expect("Should have file in memory!");
+    let result = get_file_as_str_from_zip(&mem_file, "xl/styles.xml");
+    assert_eq!(DEFAULT_STYLE_XML.to_string(), result, "The style sheet should match!");
+
+    let sheet1 = get_file_as_str_from_zip(&mem_file, "xl/worksheets/sheet1.xml");
+    let expected_date_format_idx = 1;
+    let expected_datetime_format_idx = 2;
+    assert!(sheet1.contains(format!("<c r=\"A2\" s=\"{}\"><v>41223</v></c>", expected_date_format_idx).as_str()), "Date contains correct reference to date format");
+    assert!(sheet1.contains(format!("<c r=\"B2\" s=\"{}\"><v>41890.88384259259</v></c>", expected_datetime_format_idx).as_str()), "Date contains correct reference to date format");
 }

@@ -1,8 +1,9 @@
 use std::{borrow::Borrow, fs::File};
 use std::io::*;
 use std::path::*;
+use std::collections::HashMap;
 
-use super::{Sheet, SheetWriter};
+use super::{escape_xml, Sheet, SheetWriter};
 
 struct ArchiveFile {
     name: PathBuf,
@@ -34,6 +35,44 @@ pub struct Workbook {
     sheets: Vec<SheetRef>,
     calc_chain: Vec<(String, usize)>,
     saved: bool,
+    cell_formats: CellFormats
+}
+
+#[derive(Default)]
+struct CellFormats {
+    base_cust_id: u16,
+    pub num_fmts: HashMap<u16,String>,
+    pub cell_xfs: Vec<CellXf>
+}
+
+impl CellFormats {
+    pub fn new() -> CellFormats {
+        let base_cust_id = 165;
+        let mut fmts = vec![];
+        // Default cell formats
+        fmts.push(CellXf {num_fmt_id: 0, font_id: 0, fill_id: 0, border_id: 0, xf_id: 0, apply_num_fmt: 1});
+        fmts.push(CellXf {num_fmt_id: 14, font_id: 0, fill_id: 0, border_id: 0, xf_id: 0, apply_num_fmt: 1});
+        fmts.push(CellXf {num_fmt_id: 22, font_id: 0, fill_id: 0, border_id: 0, xf_id: 0, apply_num_fmt: 1});
+        CellFormats {base_cust_id, num_fmts: HashMap::new(), cell_xfs: fmts}
+    }
+
+    pub fn add_cust_number_format(&mut self, pattern: String) -> u16 {
+        let new_id = self.base_cust_id + self.num_fmts.len() as u16;
+        self.num_fmts.insert(new_id, pattern);
+        let result = self.cell_xfs.len() as u16;
+        self.cell_xfs.push(CellXf{num_fmt_id: new_id, font_id: 0, fill_id: 0, border_id:  0, xf_id: 0, apply_num_fmt: 1});
+        result
+    }
+}
+
+#[derive(Default, Clone)]
+struct CellXf {
+    pub num_fmt_id: u16,
+    pub font_id: u16,
+    pub fill_id: u16,
+    pub border_id: u16,
+    pub xf_id: u16,
+    pub apply_num_fmt: u16
 }
 
 #[derive(Default, Clone)]
@@ -95,6 +134,7 @@ impl Workbook {
             sheets: Vec::new(),
             calc_chain: Vec::new(),
             saved: false,
+            cell_formats: CellFormats::new()
         }
     }
     /// Creates a workbook not using shared strings
@@ -107,6 +147,7 @@ impl Workbook {
             sheets: Vec::new(),
             calc_chain: Vec::new(),
             saved: false,
+            cell_formats: CellFormats::new()
         }
     }
 
@@ -119,6 +160,7 @@ impl Workbook {
             sheets: Vec::new(),
             calc_chain: Vec::new(),
             saved: false,
+            cell_formats: CellFormats::new()
         }
     }
 
@@ -167,6 +209,10 @@ impl Workbook {
         } else {
             Ok(Some(buf))
         }
+    }
+
+    pub fn add_cust_number_format(&mut self, format_str: String) -> u16 {
+        self.cell_formats.add_cust_number_format(format_str)
     }
 
     fn create_files(&mut self) -> Result<()> {
@@ -218,7 +264,7 @@ impl Workbook {
         root.push("xl");
         root.push("styles.xml");
         let mut writer = Vec::new();
-        Self::create_styles(&mut writer)?;
+        self.create_styles(&mut writer)?;
         self.archive_files.push(ArchiveFile {
             name: root.clone(),
             data: writer,
@@ -421,11 +467,26 @@ impl Workbook {
         writer.write_all(xml)
     }
 
-    fn create_styles(writer: &mut dyn Write) -> Result<()> {
+    fn create_styles(&self, writer: &mut dyn Write) -> Result<()> {
         let xml = br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
             xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
-    <fonts count="1">
+"#;
+        writer.write_all(xml)?;
+        if self.cell_formats.num_fmts.len() > 0 {
+            let num_fmts = format!("    <numFmts count=\"{}\">", self.cell_formats.num_fmts.len());
+            writer.write_all(num_fmts.as_bytes())?;
+            // Sort the map for consistent XML format
+            let mut fmts_sorted: Vec<(&u16, &String)> = self.cell_formats.num_fmts.iter().collect();
+            fmts_sorted.sort_by_key(|item| item.0);
+            for (fmt_id, value) in fmts_sorted {
+                let fmt = format!("\n        <numFmt numFmtId=\"{}\" formatCode=\"{}\"/>", fmt_id, escape_xml(value));
+                writer.write_all(fmt.as_bytes())?;
+            }
+            let fmt_tail = "\n    </numFmts>\n".as_bytes();
+            writer.write_all(fmt_tail)?;
+        }
+        let mid = br#"    <fonts count="1">
         <font>
             <sz val="12"/>
             <color theme="1"/>
@@ -453,20 +514,25 @@ impl Workbook {
     </borders>
     <cellStyleXfs count="1">
         <xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>
-    </cellStyleXfs>
-    <cellXfs count="2">
-        <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
-        <xf numFmtId="14" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
-        <xf numFmtId="22" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
-    </cellXfs>
-    <cellStyles count="1">
+    </cellStyleXfs>"#;
+        writer.write_all(mid)?;
+        if self.cell_formats.cell_xfs.len() > 0 {
+            let cell_xfs_start = format!("\n    <cellXfs count=\"{}\">", self.cell_formats.cell_xfs.len());
+            writer.write_all(cell_xfs_start.as_bytes())?;
+            for xf in &self.cell_formats.cell_xfs {
+                let xf_entry = format!("\n        <xf numFmtId=\"{}\" fontId=\"{}\" fillId=\"{}\" borderId=\"{}\" xfId=\"{}\" applyNumberFormat=\"{}\"/>", xf.num_fmt_id, xf.font_id, xf.fill_id, xf.border_id, xf.xf_id, xf.apply_num_fmt);
+                writer.write_all(xf_entry.as_bytes())?;
+            }
+            let cell_xfs_end = "\n    </cellXfs>\n".as_bytes();
+            writer.write_all(cell_xfs_end)?;
+        }
+        let tail = br#"    <cellStyles count="1">
         <cellStyle name="Normal" xfId="0" builtinId="0"/>
     </cellStyles>
     <dxfs count="0"/>
     <tableStyles count="0" defaultTableStyle="TableStyleMedium9" defaultPivotStyle="PivotStyleMedium4"/>
-</styleSheet>
-        "#;
-        writer.write_all(xml)
+</styleSheet>"#;
+        writer.write_all(tail)
     }
 
     fn create_workbook(&mut self, writer: &mut dyn Write) -> Result<()> {

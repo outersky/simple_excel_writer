@@ -71,6 +71,7 @@ pub struct Column {
 pub enum CellValue {
     Bool(bool),
     Number(f64),
+    NumberFormatted((f64, u16)),
     #[cfg(feature = "chrono")]
     Date(f64),
     #[cfg(feature = "chrono")]
@@ -97,6 +98,12 @@ pub trait ToCellValue {
 impl ToCellValue for bool {
     fn to_cell_value(&self) -> CellValue {
         CellValue::Bool(self.to_owned())
+    }
+}
+
+impl ToCellValue for (f64, u16) {
+    fn to_cell_value(&self) -> CellValue {
+        CellValue::NumberFormatted(self.to_owned())
     }
 }
 
@@ -252,6 +259,7 @@ fn write_value(cv: &CellValue, ref_id: String, writer: &mut dyn Write) -> Result
             writer.write_all(s.as_bytes())?;
         }
         &CellValue::Number(num) => write_number(&ref_id, num, None, writer)?,
+        &CellValue::NumberFormatted(num) => write_number(&ref_id, num.0, Some(num.1), writer)?,
         #[cfg(feature = "chrono")]
         &CellValue::Date(num) => write_number(&ref_id, num, Some(1), writer)?,
         #[cfg(feature = "chrono")]
@@ -297,7 +305,7 @@ fn write_number(
     }
 }
 
-fn escape_xml(str: &str) -> String {
+pub fn escape_xml(str: &str) -> String {
     let str = str.replace("&", "&amp;");
     let str = str.replace("<", "&lt;");
     let str = str.replace(">", "&gt;");
