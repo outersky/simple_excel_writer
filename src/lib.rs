@@ -42,6 +42,18 @@
 //!         sw.append_row(row!["Amy", "Manager", true])
 //!     }).expect("write excel error!");
 //!
+//!     let euro_fmt_idx = wb.add_cust_number_format("\"€\"#,##0.00".to_string());
+//!     let weight_fmt_idx = wb.add_cust_number_format("#,##0.0\" KG\"".to_string());
+//!     let mut sheet_num_fmt = wb.create_sheet("SheetNumFormatted");
+//!     sheet_num_fmt.add_column(Column { width: 30.0 });
+//!     sheet_num_fmt.add_column(Column { width: 30.0 });
+//!     wb.write_sheet(&mut sheet_num_fmt, |sheet_writer| {
+//!         let sw = sheet_writer;
+//!         sw.append_row(row!["Weight", "Price"])?;
+//!         sw.append_row(row![(700.5, weight_fmt_idx), (12045.99, euro_fmt_idx)])?;
+//!         sw.append_row(row![(1525.0, weight_fmt_idx), (25999.00, euro_fmt_idx)])
+//!     }).expect("write excel error!");
+//!
 //!     wb.close().expect("close excel error!");
 //! }
 //! ```
