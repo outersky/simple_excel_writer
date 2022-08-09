@@ -34,17 +34,26 @@ fn main() {
     })
     .expect("write excel error!");
 
-    let euro_fmt_idx = wb.add_cust_number_format("\"€\"#,##0.00".to_string());
-    let weight_fmt_idx = wb.add_cust_number_format("#,##0.0\" KG\"".to_string());
+    let euro_fmt_idx = wb.add_number_format("\"€\"#,##0.00".to_string());
+    let weight_fmt_idx = wb.add_number_format("#,##0.0\" KG\"".to_string());
+    let euro_fmt = wb.add_cell_xf(CellXf {
+        num_fmt: Some(euro_fmt_idx),
+        ..Default::default()
+    });
+    let weight_fmt = wb.add_cell_xf(CellXf {
+        num_fmt: Some(weight_fmt_idx),
+        ..Default::default()
+    });
     let mut sheet_num_fmt = wb.create_sheet("SheetNumFormatted");
     sheet_num_fmt.add_column(Column { width: 30.0 });
     sheet_num_fmt.add_column(Column { width: 30.0 });
     wb.write_sheet(&mut sheet_num_fmt, |sheet_writer| {
         let sw = sheet_writer;
         sw.append_row(row!["Weight", "Price"])?;
-        sw.append_row(row![(700.5, weight_fmt_idx), (12045.99, euro_fmt_idx)])?;
-        sw.append_row(row![(1525.0, weight_fmt_idx), (25999.00, euro_fmt_idx)])
-    }).expect("write excel error!");
+        sw.append_row(row![(700.5, weight_fmt), (12045.99, euro_fmt)])?;
+        sw.append_row(row![(1525.0, weight_fmt), (25999.00, euro_fmt)])
+    })
+    .expect("write excel error!");
 
     wb.close().expect("close excel error!");
 }
