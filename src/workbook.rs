@@ -31,6 +31,7 @@ fn path_format(path: &std::path::Path) -> String {
     })
 }
 
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub enum BorderStyle {
     None,
     Thin,
@@ -71,7 +72,7 @@ impl BorderStyle {
     }
 }
 
-#[derive(Default)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct BorderFormat {
     pub top: Option<(BorderStyle, Color)>,
     pub right: Option<(BorderStyle, Color)>,
@@ -79,7 +80,7 @@ pub struct BorderFormat {
     pub left: Option<(BorderStyle, Color)>,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub enum Color {
     Theme(u16),
     Argb(u32),
