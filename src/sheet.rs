@@ -191,7 +191,7 @@ impl ToCellData for f64 {
 impl ToCellData for String {
     fn to_cell_data(&self) -> CellData {
         if self.starts_with('=') {
-            return CellValue::Formula(self.to_owned()).into();
+            return CellValue::Formula((&self[1..]).to_string()).into();
         }
         CellValue::String(self.to_owned()).into()
     }
@@ -200,7 +200,7 @@ impl ToCellData for String {
 impl<'a> ToCellData for &'a str {
     fn to_cell_data(&self) -> CellData {
         if self.starts_with('=') {
-            return CellValue::Formula(self.to_string()).into();
+            return CellValue::Formula((&self[1..]).to_string()).into();
         }
         CellValue::String(self.to_string()).into()
     }
