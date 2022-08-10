@@ -1,7 +1,8 @@
 # simple_excel_writer
+
 simple excel writer in Rust
 
-[![Build Status](https://travis-ci.org/outersky/simple_excel_writer.png?branch=master)](https://travis-ci.org/outersky/simple_excel_writer) 
+[![Build Status](https://travis-ci.org/outersky/simple_excel_writer.png?branch=master)](https://travis-ci.org/outersky/simple_excel_writer)
 [Documentation](https://docs.rs/simple_excel_writer/)
 
 ## Example
@@ -60,10 +61,12 @@ fn main() {
 ## Change Log
 
 ### 0.2.0 (2022-03-11)
+
 - support WASM !
 
 ### 0.1.9 (2021-10-28)
-- support formula 
+
+- support formula
 - support NaiveDate & NaiveDateTime
 - format dates and date times
 - Sheet name validation
@@ -72,6 +75,7 @@ fn main() {
 many thanks to all contributors !
 
 #### 0.1.7 (2020-04-29)
+
 - support create-in-memory mode, thanks to Maxburke.
 
 ```
@@ -84,23 +88,30 @@ the completed XLSX file contents when closed.
 ```
 
 #### 0.1.6 (2020-04-06)
+
 - support shared strings between worksheets, thanks to Mikael Edlund.
 
 #### 0.1.5 (2019-03-21)
+
 - support Windows platform, thanks to Carl Fredrik Samson.
 
 #### 0.1.4 (2017-03-24)
+
 - escape xml characters.
 
 #### 0.1.3 (2017-01-03)
+
 - support 26+ columns .
 - fix column width bug.
 
 #### 0.1.2 (2017-01-02)
+
 - support multiple sheets
 
 #### 0.1 (2017-01-01)
+
 - generate the basic xlsx file
 
 ## License
+
 Apache-2.0

@@ -1,7 +1,12 @@
-use std::{borrow::Borrow, fs::File};
+use std::collections::BTreeMap;
 use std::io::*;
 use std::path::*;
-use std::collections::HashMap;
+use std::{borrow::Borrow, fs::File};
+
+use crate::Border;
+use crate::Fill;
+use crate::Font;
+use crate::{NumberFormat, XfFormat};
 
 use super::{escape_xml, Sheet, SheetWriter};
 
@@ -21,9 +26,72 @@ fn path_format(path: &std::path::Path) -> String {
 
             buf.push_str(s.to_string_lossy().borrow());
         }
-        
+
         buf
     })
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+pub enum BorderStyle {
+    None,
+    Thin,
+    Medium,
+    Dashed,
+    Dotted,
+    Thick,
+    Double,
+    Hair,
+    MediumDashed,
+    DashDot,
+    MediumDashDot,
+    DashDotDot,
+    MediumDashDotDot,
+    SlantDashDot,
+}
+impl BorderStyle {
+    pub fn xml(&self) -> String {
+        format!(
+            "style=\"{}\"",
+            match self {
+                BorderStyle::None => "none",
+                BorderStyle::Thin => "thin",
+                BorderStyle::Medium => "medium",
+                BorderStyle::Dashed => "dashed",
+                BorderStyle::Dotted => "dotted",
+                BorderStyle::Thick => "thick",
+                BorderStyle::Double => "double",
+                BorderStyle::Hair => "hair",
+                BorderStyle::MediumDashed => "mediumDashed",
+                BorderStyle::DashDot => "dashDot",
+                BorderStyle::MediumDashDot => "mediumDashDot",
+                BorderStyle::DashDotDot => "dashDotDot",
+                BorderStyle::MediumDashDotDot => "mediumDashDotDot",
+                BorderStyle::SlantDashDot => "slantDashDot",
+            }
+        )
+    }
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Default)]
+pub struct BorderFormat {
+    pub top: Option<(BorderStyle, Color)>,
+    pub right: Option<(BorderStyle, Color)>,
+    pub bottom: Option<(BorderStyle, Color)>,
+    pub left: Option<(BorderStyle, Color)>,
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+pub enum Color {
+    Theme(u16),
+    Argb(u32),
+}
+impl Color {
+    fn xml(&self) -> String {
+        match self {
+            Color::Theme(theme) => format!("theme=\"{theme}\""),
+            Color::Argb(rgb) => format!("rgb=\"{rgb:0>8X}\""),
+        }
+    }
 }
 
 #[derive(Default)]
@@ -35,44 +103,77 @@ pub struct Workbook {
     sheets: Vec<SheetRef>,
     calc_chain: Vec<(String, usize)>,
     saved: bool,
-    cell_formats: CellFormats
+    cell_formats: CellFormats,
 }
+
+pub const BASE_NUM_FMT_CUSTOM: u16 = 165;
+pub const BASE_FILL: u16 = 2;
+pub const BASE_BORDER: u16 = 1;
 
 #[derive(Default)]
 struct CellFormats {
-    base_cust_id: u16,
-    pub num_fmts: HashMap<u16,String>,
-    pub cell_xfs: Vec<CellXf>
+    pub num_fmts: BTreeMap<u16, String>,
+    pub fills: Vec<(Color, Color)>,
+    pub borders: Vec<BorderFormat>,
+    pub cell_xfs: Vec<CellXf>,
 }
 
 impl CellFormats {
     pub fn new() -> CellFormats {
-        let base_cust_id = 165;
-        let mut fmts = vec![];
-        // Default cell formats
-        fmts.push(CellXf {num_fmt_id: 0, font_id: 0, fill_id: 0, border_id: 0, xf_id: 0, apply_num_fmt: 1});
-        fmts.push(CellXf {num_fmt_id: 14, font_id: 0, fill_id: 0, border_id: 0, xf_id: 0, apply_num_fmt: 1});
-        fmts.push(CellXf {num_fmt_id: 22, font_id: 0, fill_id: 0, border_id: 0, xf_id: 0, apply_num_fmt: 1});
-        CellFormats {base_cust_id, num_fmts: HashMap::new(), cell_xfs: fmts}
+        let cell_xfs = vec![
+            CellXf {
+                num_fmt: Some(NumberFormat(0)),
+                ..Default::default()
+            },
+            CellXf {
+                num_fmt: Some(NumberFormat(14)),
+                ..Default::default()
+            },
+            CellXf {
+                num_fmt: Some(NumberFormat(22)),
+                ..Default::default()
+            },
+
+        ];
+        CellFormats {
+            num_fmts: BTreeMap::new(),
+            fills: Vec::new(),
+            borders: Vec::new(),
+            cell_xfs,
+        }
     }
 
-    pub fn add_cust_number_format(&mut self, pattern: String) -> u16 {
-        let new_id = self.base_cust_id + self.num_fmts.len() as u16;
+    pub fn add_fill(&mut self, fg_color: Color, bg_color: Color) -> Fill {
+        let result = BASE_FILL + self.fills.len() as u16;
+        self.fills.push((fg_color, bg_color));
+        Fill(result)
+    }
+
+    pub fn add_border(&mut self, border_format: BorderFormat) -> Border {
+        let result = BASE_BORDER + self.borders.len() as u16;
+        self.borders.push(border_format);
+        Border(result)
+    }
+
+    pub fn add_number_format(&mut self, pattern: String) -> NumberFormat {
+        let new_id = BASE_NUM_FMT_CUSTOM + self.num_fmts.len() as u16;
         self.num_fmts.insert(new_id, pattern);
+        NumberFormat(new_id)
+    }
+
+    pub fn add_cell_xf(&mut self, cell_xf: CellXf) -> XfFormat {
         let result = self.cell_xfs.len() as u16;
-        self.cell_xfs.push(CellXf{num_fmt_id: new_id, font_id: 0, fill_id: 0, border_id:  0, xf_id: 0, apply_num_fmt: 1});
-        result
+        self.cell_xfs.push(cell_xf);
+        XfFormat(result)
     }
 }
 
 #[derive(Default, Clone)]
-struct CellXf {
-    pub num_fmt_id: u16,
-    pub font_id: u16,
-    pub fill_id: u16,
-    pub border_id: u16,
-    pub xf_id: u16,
-    pub apply_num_fmt: u16
+pub struct CellXf {
+    pub num_fmt: Option<NumberFormat>,
+    pub font: Option<Font>,
+    pub fill: Option<Fill>,
+    pub border: Option<Border>,
 }
 
 #[derive(Default, Clone)]
@@ -134,7 +235,7 @@ impl Workbook {
             sheets: Vec::new(),
             calc_chain: Vec::new(),
             saved: false,
-            cell_formats: CellFormats::new()
+            cell_formats: CellFormats::new(),
         }
     }
     /// Creates a workbook not using shared strings
@@ -147,7 +248,7 @@ impl Workbook {
             sheets: Vec::new(),
             calc_chain: Vec::new(),
             saved: false,
-            cell_formats: CellFormats::new()
+            cell_formats: CellFormats::new(),
         }
     }
 
@@ -160,7 +261,7 @@ impl Workbook {
             sheets: Vec::new(),
             calc_chain: Vec::new(),
             saved: false,
-            cell_formats: CellFormats::new()
+            cell_formats: CellFormats::new(),
         }
     }
 
@@ -211,8 +312,20 @@ impl Workbook {
         }
     }
 
-    pub fn add_cust_number_format(&mut self, format_str: String) -> u16 {
-        self.cell_formats.add_cust_number_format(format_str)
+    pub fn add_fill(&mut self, fg_color: Color, bg_color: Color) -> Fill {
+        self.cell_formats.add_fill(fg_color, bg_color)
+    }
+
+    pub fn add_border(&mut self, border_format: BorderFormat) -> Border {
+        self.cell_formats.add_border(border_format)
+    }
+
+    pub fn add_number_format(&mut self, format_str: String) -> NumberFormat {
+        self.cell_formats.add_number_format(format_str)
+    }
+
+    pub fn add_cell_xf(&mut self, cell_xf: CellXf) -> XfFormat {
+        self.cell_formats.add_cell_xf(cell_xf)
     }
 
     fn create_files(&mut self) -> Result<()> {
@@ -288,7 +401,7 @@ impl Workbook {
             data: writer,
         });
         root.pop();
-        
+
         root.push("calcChain.xml");
         let mut writer = Vec::new();
         self.create_calc_chain(&mut writer)?;
@@ -362,10 +475,7 @@ impl Workbook {
 <calcChain xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">"#;
         writer.write_all(xml)?;
         for x in &self.calc_chain {
-            let wb = format!(
-                "<c r=\"{}\" i=\"{}\"/>",
-                x.0, x.1
-            );
+            let wb = format!("<c r=\"{}\" i=\"{}\"/>", x.0, x.1);
             writer.write_all(wb.as_bytes())?;
         }
         let tail = br#"</calcChain>"#;
@@ -473,20 +583,28 @@ impl Workbook {
             xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
 "#;
         writer.write_all(xml)?;
-        if self.cell_formats.num_fmts.len() > 0 {
-            let num_fmts = format!("    <numFmts count=\"{}\">", self.cell_formats.num_fmts.len());
+        if !self.cell_formats.num_fmts.is_empty() {
+            let num_fmts = format!(
+                "    <numFmts count=\"{}\">",
+                self.cell_formats.num_fmts.len()
+            );
             writer.write_all(num_fmts.as_bytes())?;
             // Sort the map for consistent XML format
             let mut fmts_sorted: Vec<(&u16, &String)> = self.cell_formats.num_fmts.iter().collect();
             fmts_sorted.sort_by_key(|item| item.0);
             for (fmt_id, value) in fmts_sorted {
-                let fmt = format!("\n        <numFmt numFmtId=\"{}\" formatCode=\"{}\"/>", fmt_id, escape_xml(value));
+                let fmt = format!(
+                    "\n        <numFmt numFmtId=\"{}\" formatCode=\"{}\"/>",
+                    fmt_id,
+                    escape_xml(value)
+                );
                 writer.write_all(fmt.as_bytes())?;
             }
             let fmt_tail = "\n    </numFmts>\n".as_bytes();
             writer.write_all(fmt_tail)?;
         }
-        let mid = br#"    <fonts count="1">
+        let mid = format!(
+            r#"    <fonts count="1">
         <font>
             <sz val="12"/>
             <color theme="1"/>
@@ -495,15 +613,34 @@ impl Workbook {
             <scheme val="minor"/>
         </font>
     </fonts>
-    <fills count="2">
+    <fills count="{}">
         <fill>
             <patternFill patternType="none"/>
         </fill>
         <fill>
             <patternFill patternType="gray125"/>
         </fill>
-    </fills>
-    <borders count="1">
+"#,
+            self.cell_formats.fills.len() as u16 + BASE_FILL
+        );
+        writer.write_all(mid.as_bytes())?;
+        for (fg, bg) in self.cell_formats.fills.iter() {
+            let fill = format!(
+                r#"        <fill>
+            <patternFill patternType="solid">
+                <fgColor {}/>
+                <bgColor {}/>
+            </patternFill>
+        </fill>
+"#,
+                fg.xml(),
+                bg.xml()
+            );
+            writer.write_all(fill.as_bytes())?;
+        }
+        let mid2 = format!(
+            r#"    </fills>
+    <borders count="{}">
         <border>
             <left/>
             <right/>
@@ -511,17 +648,65 @@ impl Workbook {
             <bottom/>
             <diagonal/>
         </border>
-    </borders>
+"#,
+            self.cell_formats.borders.len() as u16 + BASE_BORDER
+        );
+        writer.write_all(mid2.as_bytes())?;
+        for border in self.cell_formats.borders.iter() {
+            writer.write_all(b"        <border>\n")?;
+            let mappings = [
+                ("left", border.left.as_ref()),
+                ("right", border.right.as_ref()),
+                ("top", border.top.as_ref()),
+                ("bottom", border.bottom.as_ref()),
+            ];
+            for (side, border) in mappings {
+                if let Some((style, color)) = border {
+                    writeln!(writer, "            <{side} {}>", style.xml())?;
+                    writeln!(writer, "                <color {}/>", color.xml())?;
+                    writeln!(writer, "            </{side}>")?;
+                } else {
+                    writeln!(writer, "            <{side}/>")?;
+                }
+            }
+            writer.write_all(b"            <diagonal/>\n")?;
+            writer.write_all(b"        </border>\n")?;
+        }
+        let mid3 = br#"    </borders>
     <cellStyleXfs count="1">
         <xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>
     </cellStyleXfs>"#;
-        writer.write_all(mid)?;
-        if self.cell_formats.cell_xfs.len() > 0 {
-            let cell_xfs_start = format!("\n    <cellXfs count=\"{}\">", self.cell_formats.cell_xfs.len());
+        writer.write_all(mid3)?;
+        if !self.cell_formats.cell_xfs.is_empty() {
+            let cell_xfs_start = format!(
+                "\n    <cellXfs count=\"{}\">",
+                self.cell_formats.cell_xfs.len()
+            );
             writer.write_all(cell_xfs_start.as_bytes())?;
             for xf in &self.cell_formats.cell_xfs {
-                let xf_entry = format!("\n        <xf numFmtId=\"{}\" fontId=\"{}\" fillId=\"{}\" borderId=\"{}\" xfId=\"{}\" applyNumberFormat=\"{}\"/>", xf.num_fmt_id, xf.font_id, xf.fill_id, xf.border_id, xf.xf_id, xf.apply_num_fmt);
-                writer.write_all(xf_entry.as_bytes())?;
+                let num_fmt_id = xf.num_fmt.unwrap_or(NumberFormat(0)).0;
+                let font_id = xf.font.unwrap_or(Font(0)).0;
+                let fill_id = xf.fill.unwrap_or(Fill(0)).0;
+                let border_id = xf.border.unwrap_or(Border(0)).0;
+                write!(writer, "\n        <xf")?;
+                write!(writer, " numFmtId=\"{num_fmt_id}\"")?;
+                write!(writer, " fontId=\"{font_id}\"")?;
+                write!(writer, " fillId=\"{fill_id}\"")?;
+                write!(writer, " borderId=\"{border_id}\"")?;
+                write!(writer, " xfId=\"0\"")?;
+                if num_fmt_id > 0 {
+                    write!(writer, " applyNumberFormat=\"1\"")?;
+                }
+                if font_id > 0 {
+                    write!(writer, " applyFont=\"1\"")?;
+                }
+                if fill_id > 0 {
+                    write!(writer, " applyFill=\"1\"")?;
+                }
+                if border_id > 0 {
+                    write!(writer, " applyBorder=\"1\"")?;
+                }
+                write!(writer, "/>")?;
             }
             let cell_xfs_end = "\n    </cellXfs>\n".as_bytes();
             writer.write_all(cell_xfs_end)?;

@@ -1,4 +1,4 @@
-use std::io::{Error, ErrorKind, Result, Write};
+use std::{io::{Error, ErrorKind, Result, Write}, iter::FromIterator};
 
 #[macro_export]
 macro_rules! row {
@@ -25,12 +25,15 @@ pub struct AutoFilter {
     pub start_col: String,
     pub end_col: String,
     pub start_row: usize,
-    pub end_row: usize
+    pub end_row: usize,
 }
 
 impl ToString for AutoFilter {
     fn to_string(&self) -> String {
-        format!("{}{}:{}{}", self.start_col, self.start_row, self.end_col, self.end_row)
+        format!(
+            "{}{}:{}{}",
+            self.start_col, self.start_row, self.end_col, self.end_row
+        )
     }
 }
 
@@ -42,7 +45,7 @@ pub struct Sheet {
     max_row_index: usize,
     pub calc_chain: Vec<String>,
     pub merged_cells: Vec<MergedCell>,
-    pub auto_filter: Option<AutoFilter>
+    pub auto_filter: Option<AutoFilter>,
 }
 
 #[derive(Default)]
@@ -55,7 +58,7 @@ pub struct Row {
 
 pub struct Cell {
     pub column_index: usize,
-    pub value: CellValue,
+    pub value: CellData,
 }
 
 pub struct MergedCell {
@@ -68,10 +71,69 @@ pub struct Column {
 }
 
 #[derive(Clone)]
+pub struct CellData {
+    pub value: CellValue,
+    pub xf_format: Option<XfFormat>,
+}
+impl From<CellValue> for CellData {
+    fn from(value: CellValue) -> Self {
+        CellData {
+            value,
+            xf_format: None,
+        }
+    }
+}
+impl CellData {
+    pub fn with_xf_format(mut self, xf_format: XfFormat) -> Self {
+        self.xf_format = Some(xf_format);
+        self
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct XfFormat(pub(crate) u16);
+impl XfFormat {
+    pub fn value(&self) -> u16 {
+        self.0
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct NumberFormat(pub(crate) u16);
+impl NumberFormat {
+    pub fn value(&self) -> u16 {
+        self.0
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct Border(pub(crate) u16);
+impl Border {
+    pub fn value(&self) -> u16 {
+        self.0
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct Font(pub(crate) u16);
+impl Font {
+    pub fn value(&self) -> u16 {
+        self.0
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct Fill(pub(crate) u16);
+impl Fill {
+    pub fn value(&self) -> u16 {
+        self.0
+    }
+}
+
+#[derive(Clone)]
 pub enum CellValue {
     Bool(bool),
     Number(f64),
-    NumberFormatted((f64, u16)),
     #[cfg(feature = "chrono")]
     Date(f64),
     #[cfg(feature = "chrono")]
@@ -91,71 +153,94 @@ where
     shared_strings: &'b mut crate::SharedStrings,
 }
 
-pub trait ToCellValue {
-    fn to_cell_value(&self) -> CellValue;
+pub trait ToCellData {
+    fn to_cell_data(&self) -> CellData;
 }
 
-impl ToCellValue for bool {
-    fn to_cell_value(&self) -> CellValue {
-        CellValue::Bool(self.to_owned())
+impl ToCellData for CellData {
+    fn to_cell_data(&self) -> CellData {
+        self.clone()
     }
 }
 
-impl ToCellValue for (f64, u16) {
-    fn to_cell_value(&self) -> CellValue {
-        CellValue::NumberFormatted(self.to_owned())
+impl ToCellData for CellValue {
+    fn to_cell_data(&self) -> CellData {
+        self.clone().into()
     }
 }
 
-impl ToCellValue for f64 {
-    fn to_cell_value(&self) -> CellValue {
-        CellValue::Number(self.to_owned())
+impl ToCellData for bool {
+    fn to_cell_data(&self) -> CellData {
+        CellValue::Bool(self.to_owned()).into()
     }
 }
 
-impl ToCellValue for String {
-    fn to_cell_value(&self) -> CellValue {
+impl ToCellData for (f64, XfFormat) {
+    fn to_cell_data(&self) -> CellData {
+        let (number, format) = self;
+        CellData::from(CellValue::Number(*number)).with_xf_format(*format)
+    }
+}
+
+impl ToCellData for f64 {
+    fn to_cell_data(&self) -> CellData {
+        CellValue::Number(self.to_owned()).into()
+    }
+}
+
+impl ToCellData for String {
+    fn to_cell_data(&self) -> CellData {
         if self.starts_with('=') {
-            return CellValue::Formula(self.to_owned());
+            return CellValue::Formula((&self[1..]).to_string()).into();
         }
-        CellValue::String(self.to_owned())
+        CellValue::String(self.to_owned()).into()
     }
 }
 
-impl<'a> ToCellValue for &'a str {
-    fn to_cell_value(&self) -> CellValue {
+impl<'a> ToCellData for &'a str {
+    fn to_cell_data(&self) -> CellData {
         if self.starts_with('=') {
-            return CellValue::Formula(self.to_string());
+            return CellValue::Formula((&self[1..]).to_string()).into();
         }
-        CellValue::String(self.to_string())
+        CellValue::String(self.to_string()).into()
     }
 }
 
-impl ToCellValue for () {
-    fn to_cell_value(&self) -> CellValue {
-        CellValue::Blank(1)
+impl ToCellData for () {
+    fn to_cell_data(&self) -> CellData {
+        CellValue::Blank(1).into()
     }
 }
 
 #[cfg(feature = "chrono")]
-impl ToCellValue for chrono::NaiveDateTime {
-    fn to_cell_value(&self) -> CellValue {
+impl ToCellData for chrono::NaiveDateTime {
+    fn to_cell_data(&self) -> CellData {
         let seconds = self.timestamp();
         let nanos = f64::from(self.timestamp_subsec_nanos()) * 1e-9;
         let unix_seconds = seconds as f64 + nanos;
         let unix_days = unix_seconds / 86400.;
-        CellValue::Datetime(unix_days + 25569.)
+        CellValue::Datetime(unix_days + 25569.).into()
     }
 }
 
 #[cfg(feature = "chrono")]
-impl ToCellValue for chrono::NaiveDate {
-    fn to_cell_value(&self) -> CellValue {
+impl ToCellData for chrono::NaiveDate {
+    fn to_cell_data(&self) -> CellData {
         use chrono::Datelike;
         const UNIX_EPOCH_DAY: i32 = 719_163;
 
         let unix_days: f64 = (self.num_days_from_ce() - UNIX_EPOCH_DAY).into();
-        CellValue::Date(unix_days + 25569.)
+        CellValue::Date(unix_days + 25569.).into()
+    }
+}
+
+impl<A: ToCellData> FromIterator<A> for Row {
+    fn from_iter<T: IntoIterator<Item = A>>(iter: T) -> Self {
+        let mut row = Row::new();
+        for val in iter {
+            row.add_cell(val)
+        }
+        row
     }
 }
 
@@ -166,31 +251,18 @@ impl Row {
         }
     }
 
-    pub fn from_iter<T>(iter: impl Iterator<Item = T>) -> Row
-    where
-        T: ToCellValue + Sized,
-    {
-        let mut row = Row::new();
-
-        for val in iter {
-            row.add_cell(val)
-        }
-
-        row
-    }
-
     pub fn add_cell<T>(&mut self, value: T)
     where
-        T: ToCellValue + Sized,
+        T: ToCellData + Sized,
     {
-        let value = value.to_cell_value();
-        match &value {
+        let value = &value.to_cell_data();
+        match &value.value {
             CellValue::Formula(f) => {
                 self.calc_chain.push(f.to_owned());
                 self.max_col_index += 1;
                 self.cells.push(Cell {
                     column_index: self.max_col_index,
-                    value,
+                    value: value.clone(),
                 })
             }
             CellValue::Blank(cols) => self.max_col_index += cols,
@@ -198,7 +270,7 @@ impl Row {
                 self.max_col_index += 1;
                 self.cells.push(Cell {
                     column_index: self.max_col_index,
-                    value,
+                    value: value.clone(),
                 })
             }
         }
@@ -236,7 +308,7 @@ impl Row {
             return self;
         }
         for cell in self.cells.iter_mut() {
-            cell.value = match &cell.value {
+            cell.value.value = match &cell.value.value {
                 CellValue::String(val) => shared.register(&escape_xml(val)),
                 x => x.to_owned(),
             };
@@ -245,43 +317,40 @@ impl Row {
     }
 }
 
-impl ToCellValue for CellValue {
-    fn to_cell_value(&self) -> CellValue {
-        self.clone()
-    }
-}
-
-fn write_value(cv: &CellValue, ref_id: String, writer: &mut dyn Write) -> Result<()> {
-    match cv {
+fn write_value(cv: &CellData, ref_id: String, writer: &mut dyn Write) -> Result<()> {
+    let cell_style = cv
+        .xf_format
+        .map(|XfFormat(xf_format)| format!(" s=\"{xf_format}\""))
+        .unwrap_or_default();
+    match &cv.value {
         CellValue::Bool(b) => {
             let v = if *b { 1 } else { 0 };
-            let s = format!("<c r=\"{}\" t=\"b\"><v>{}</v></c>", ref_id, v);
+            let s = format!("<c r=\"{}\" t=\"b\"{cell_style}><v>{}</v></c>", ref_id, v);
             writer.write_all(s.as_bytes())?;
         }
-        &CellValue::Number(num) => write_number(&ref_id, num, None, writer)?,
-        &CellValue::NumberFormatted(num) => write_number(&ref_id, num.0, Some(num.1), writer)?,
+        &CellValue::Number(num) => write_number(&ref_id, num, cv.xf_format, writer)?,
         #[cfg(feature = "chrono")]
-        &CellValue::Date(num) => write_number(&ref_id, num, Some(1), writer)?,
+        &CellValue::Date(num) => write_number(&ref_id, num, Some(XfFormat(1)), writer)?,
         #[cfg(feature = "chrono")]
-        &CellValue::Datetime(num) => write_number(&ref_id, num, Some(2), writer)?,
+        &CellValue::Datetime(num) => write_number(&ref_id, num, Some(XfFormat(2)), writer)?,
         CellValue::String(ref s) => {
             let s = format!(
-                "<c r=\"{}\" t=\"str\"><v>{}</v></c>",
+                "<c r=\"{}\" t=\"str\"{cell_style}><v>{}</v></c>",
                 ref_id,
-                escape_xml(&s)
+                escape_xml(s)
             );
             writer.write_all(s.as_bytes())?;
         }
         CellValue::Formula(ref s) => {
             let s = format!(
-                "<c r=\"{}\" t=\"str\"><f>{}</f></c>",
+                "<c r=\"{}\" t=\"str\"{cell_style}><f>{}</f></c>",
                 ref_id,
-                escape_xml(&s)
+                escape_xml(s)
             );
             writer.write_all(s.as_bytes())?;
         }
         CellValue::SharedString(ref s) => {
-            let s = format!("<c r=\"{}\" t=\"s\"><v>{}</v></c>", ref_id, s);
+            let s = format!("<c r=\"{}\" t=\"s\"{cell_style}><v>{}</v></c>", ref_id, s);
             writer.write_all(s.as_bytes())?;
         }
         CellValue::Blank(_) => {}
@@ -292,25 +361,22 @@ fn write_value(cv: &CellValue, ref_id: String, writer: &mut dyn Write) -> Result
 fn write_number(
     ref_id: &str,
     value: f64,
-    style: Option<u16>,
+    style: Option<XfFormat>,
     writer: &mut dyn Write,
 ) -> Result<()> {
-    match style {
-        Some(style) => write!(
-            writer,
-            r#"<c r="{}" s="{}"><v>{}</v></c>"#,
-            ref_id, style, value
-        ),
-        None => write!(writer, r#"<c r="{}"><v>{}</v></c>"#, ref_id, value),
+    write!(writer, r#"<c r="{ref_id}""#)?;
+    if let Some(XfFormat(format)) = style {
+        write!(writer, r#" s="{format}""#)?;
     }
+    write!(writer, r#"><v>{value}</v></c>"#)
 }
 
 pub fn escape_xml(str: &str) -> String {
-    let str = str.replace("&", "&amp;");
-    let str = str.replace("<", "&lt;");
-    let str = str.replace(">", "&gt;");
-    let str = str.replace("'", "&apos;");
-    str.replace("\"", "&quot;")
+    let str = str.replace('&', "&amp;");
+    let str = str.replace('<', "&lt;");
+    let str = str.replace('>', "&gt;");
+    let str = str.replace('\'', "&apos;");
+    str.replace('\"', "&quot;")
 }
 
 impl Cell {
@@ -352,12 +418,11 @@ pub fn column_letter(column_index: usize) -> String {
 
     let result = result.into_iter().rev();
 
-    use std::iter::FromIterator;
     String::from_iter(result)
 }
 
 pub fn validate_name(name: &str) -> String {
-    escape_xml(name).replace("/", "-")
+    escape_xml(name).replace('/', "-")
 }
 
 impl Sheet {
@@ -373,11 +438,20 @@ impl Sheet {
     /// The arguments are used to construct the range of columns and rows used by the "AutoFilter"
     /// feature. For example: Column 1, Row 1 to Column 2, Row 2 will create the range "A1:B2".
     /// If invalid parameters are provided, the "AutoFilter" is not created.
-    pub fn add_auto_filter(&mut self, start_col: usize, end_col: usize, start_row: usize, end_row: usize) {
+    pub fn add_auto_filter(
+        &mut self,
+        start_col: usize,
+        end_col: usize,
+        start_row: usize,
+        end_row: usize,
+    ) {
         if start_col > 0 && start_row > 0 && start_col <= end_col && start_row <= end_row {
-            self.auto_filter = Some(AutoFilter{ start_col: column_letter(start_col),
-                                                end_col: column_letter(end_col),
-                                                start_row, end_row });
+            self.auto_filter = Some(AutoFilter {
+                start_col: column_letter(start_col),
+                end_col: column_letter(end_col),
+                start_row,
+                end_row,
+            });
         }
     }
 
@@ -448,7 +522,13 @@ impl Sheet {
 
     fn write_data_end(&self, writer: &mut dyn Write) -> Result<()> {
         if let Some(auto_filter) = &self.auto_filter {
-            writer.write_all(format!("\n</sheetData>\n<autoFilter ref=\"{}\"/>\n", auto_filter.to_string()).as_bytes())
+            writer.write_all(
+                format!(
+                    "\n</sheetData>\n<autoFilter ref=\"{}\"/>\n",
+                    auto_filter.to_string()
+                )
+                .as_bytes(),
+            )
         } else {
             writer.write_all(b"\n</sheetData>\n")
         }
@@ -474,7 +554,7 @@ impl<'a, 'b> SheetWriter<'a, 'b> {
 
     pub fn append_row(&mut self, row: Row) -> Result<()> {
         self.sheet
-            .write_row(self.writer, row.replace_strings(&mut self.shared_strings))
+            .write_row(self.writer, row.replace_strings(self.shared_strings))
     }
 
     pub fn append_blank_rows(&mut self, rows: usize) {
@@ -542,9 +622,9 @@ mod chrono_tests {
         const EXPECTED: f64 = 41223.63725694444;
         let cell = NaiveDate::from_ymd(2012, 11, 10)
             .and_hms(15, 17, 39)
-            .to_cell_value();
+            .to_cell_data();
 
-        match cell {
+        match cell.value {
             CellValue::Datetime(n) if n == EXPECTED => {}
             CellValue::Datetime(n) => panic!(
                 "invalid chrono::NaiveDateTime conversion to CellValue. {} is expected, found {}",
@@ -557,9 +637,9 @@ mod chrono_tests {
     #[test]
     fn chrono_date() {
         const EXPECTED: f64 = 41223.;
-        let cell = NaiveDate::from_ymd(2012, 11, 10).to_cell_value();
+        let cell = NaiveDate::from_ymd(2012, 11, 10).to_cell_data();
 
-        match cell {
+        match cell.value {
             CellValue::Date(n) if n == EXPECTED => {}
             CellValue::Date(n) => panic!(
                 "invalid chrono::NaiveDate conversion to CellValue. {} is expected, found {}",
