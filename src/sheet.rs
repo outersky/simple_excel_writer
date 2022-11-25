@@ -77,6 +77,7 @@ pub enum CellValue {
     #[cfg(feature = "chrono")]
     Datetime(f64),
     String(String),
+    StringPreserveSpace(String),
     Formula(String),
     Blank(usize),
     SharedString(String),
@@ -264,10 +265,15 @@ fn write_value(cv: &CellValue, ref_id: String, writer: &mut dyn Write) -> Result
         &CellValue::Date(num) => write_number(&ref_id, num, Some(1), writer)?,
         #[cfg(feature = "chrono")]
         &CellValue::Datetime(num) => write_number(&ref_id, num, Some(2), writer)?,
-        CellValue::String(ref s) => {
+        CellValue::String(ref s) | CellValue::StringPreserveSpace(ref s) => {
+            let pres_xml = match cv {
+                CellValue::StringPreserveSpace(_) => " xml:space=\"preserve\"",
+                _ => ""
+            };
             let s = format!(
-                "<c r=\"{}\" t=\"str\"><v>{}</v></c>",
+                "<c r=\"{}\" t=\"str\"><v{}>{}</v></c>",
                 ref_id,
+                pres_xml,
                 escape_xml(&s)
             );
             writer.write_all(s.as_bytes())?;
