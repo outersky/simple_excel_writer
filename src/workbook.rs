@@ -192,7 +192,8 @@ impl Workbook {
             let mut cursor = Cursor::new(&mut buf);
             let mut writer = zip::ZipWriter::new(&mut cursor);
             for archive_file in self.archive_files.iter() {
-                let options = zip::write::FileOptions::default();
+                let options = zip::write::FileOptions::default()
+                    .last_modified_time(zip::DateTime::default());
                 writer.start_file(path_format(&archive_file.name), options)?;
                 writer.write_all(&archive_file.data)?;
             }
